@@ -8,5 +8,9 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "mcp-handler": "^1.1.0",
+    "zod": "^4.4.3"
   }
 }

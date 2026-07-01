@@ -27,6 +27,8 @@ import {
   type VoltageControlledSwitch,
   type Voltmeter,
 } from "./types";
+import { createMcpHandler } from "mcp-handler";
+import { z } from "zod";
 
 const DELIMITERS = [0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20];
 
@@ -523,14 +525,14 @@ function deserialize(contents: Uint8Array) {
   } satisfies DeserializedCircuit;
 }
 
-if (import.meta.main) {
-  const contents = await Bun.file(process.argv[2]!).bytes();
+// if (import.meta.main) {
+const contents = await Bun.file(process.argv[2]!).bytes();
 
-  const circuit = deserialize(contents);
-  console.dir(circuit, { depth: null });
+const circuit = deserialize(contents);
+console.dir(circuit, { depth: null });
 
-  Bun.file("output.ewb").write(serialize(circuit));
-}
+Bun.file("output.ewb").write(serialize(circuit));
+// }
 
 function quote(s: string) {
   // Escape backslashes and quotes for A/R string format
@@ -878,3 +880,159 @@ function serialize({ elements, wires }: DeserializedCircuit) {
 
   return TEMPLATE.replace("__ELEMENTS_WIRES__", elementsAndWires);
 }
+
+function addBaseElement<T extends Element>({
+  circuit,
+  name,
+  rotation,
+  x,
+  y,
+  data,
+  modelName = "ideal",
+  ...additionalProps
+}: {
+  circuit: DeserializedCircuit;
+} & Omit<T, "_modelUnits" | "_raw" | "_value" | "_status" | "connectedWires">) {
+  circuit.elements.push({
+    name,
+    rotation,
+    x,
+    y,
+    data,
+    modelName,
+    type: ElementType.BASE,
+    _value: Object.values(data as Record<string, number>),
+    _modelUnits: [0],
+    _raw: {},
+    _status: 0,
+    connectedWires: [],
+    ...additionalProps,
+  } satisfies Element);
+}
+
+function addExtensionElement({
+  circuit,
+  name,
+  rotation,
+  x,
+  y,
+  modelName = "ideal",
+  value,
+  data,
+}: {
+  circuit: DeserializedCircuit;
+  name: string;
+  rotation: number;
+  x: number;
+  y: number;
+  value: Record<string, number>;
+  data: string;
+  modelName?: string;
+  [additional: string]: unknown;
+}) {
+  circuit.elements.push({
+    name,
+    rotation,
+    x,
+    y,
+    data: { value, data },
+    modelName,
+    type: ElementType.EXTENSION,
+    _value: Object.values(value), // I guess.....
+    _modelUnits: [0],
+    _raw: { Data: data },
+    _status: 0,
+    connectedWires: [],
+  } satisfies Element);
+}
+
+const handler = createMcpHandler((server) => {
+  let circuit: DeserializedCircuit | null = null;
+  server.registerTool(
+    "ewb_load_file",
+    { description: "Load an EWB circuit file", inputSchema: z.string() },
+    async (fileContents) => {
+      circuit = deserialize(
+        new Uint8Array(fileContents.split("").map((c) => c.charCodeAt(0))),
+      );
+      return { content: [] };
+    },
+  );
+  server.registerTool(
+    "ewb_add_resistor",
+    {
+      description: "Add a resistor to the circuit",
+      inputSchema: z.object({
+        rotation: z.union([
+          z.literal(0),
+          z.literal(90),
+          z.literal(180),
+          z.literal(270),
+        ]),
+        x: z.number(),
+        y: z.number(),
+        resistance: z.number(),
+        resistanceMultiplier: z.union([
+          z.literal(1000),
+          z.literal(1000000),
+          z.literal(1000000000),
+        ]),
+      }),
+    },
+    async ({ rotation, x, y, resistance, resistanceMultiplier }) => {
+      if (!circuit) {
+        throw new Error("No circuit loaded");
+      }
+      //   circuit.elements.push({
+      //     name: "RESISTOR",
+      //     rotation,
+      //     x,
+      //     y,
+      //     data: { resistance, TC1: 0, TC2: 0, Tnom: 5 },
+      //     multipliers: {
+      //       resistance: resistanceMultiplier,
+      //       TC1: 0,
+      //       TC2: 0,
+      //       Tnom: 0,
+      //     },
+      //     connectedWires: [],
+      //     modelName: "ideal",
+      //     type: ElementType.BASE,
+      //     _value: [resistance, 0, 0, 5],
+      //     _modelUnits: [resistanceMultiplier, 0, 0, 0],
+      //     _raw: {},
+      //     _status: 0,
+      //   } satisfies Resistor);
+      addBaseElement<Resistor>({
+        circuit,
+        name: "RESISTOR",
+        rotation,
+        x,
+        y,
+        data: { resistance, TC1: 0, TC2: 0, Tnom: 5 },
+        multipliers: {
+          resistance: resistanceMultiplier,
+          TC1: 0,
+          TC2: 0,
+          Tnom: 0,
+        },
+        _modelUnits: [resistanceMultiplier, 0, 0, 0],
+      });
+      return { content: [] };
+    },
+  );
+  server.registerTool(
+    "ewb_save_file",
+    {
+      description: "Save the current EWB circuit file",
+      inputSchema: z.void(),
+      outputSchema: z.object({ file: z.string() }),
+    },
+    async () => {
+      if (!circuit) {
+        throw new Error("No circuit loaded");
+      }
+      return { content: [{ data: [serialize(circuit)] }] }; // something something
+    },
+  );
+});

@@ -373,6 +373,7 @@ export interface Element {
   _status: number;
   /** Catch-all for extra raw properties not in the typed interface (e.g. m_tptrElem). */
   _raw: Record<string, unknown>;
+  [k: string]: unknown; // anything specific
 }
 
 export interface AcVoltageSource extends Element {
