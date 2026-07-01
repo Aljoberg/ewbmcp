@@ -892,7 +892,14 @@ function addBaseElement<T extends Element>({
   ...additionalProps
 }: {
   circuit: DeserializedCircuit;
-} & Omit<T, "_modelUnits" | "_raw" | "_value" | "_status" | "connectedWires">) {
+  name: string;
+  rotation: number;
+  x: number;
+  y: number;
+  data: T["data"];
+  modelName?: string;
+  [additional: string]: unknown;
+}) {
   circuit.elements.push({
     name,
     rotation,
@@ -907,7 +914,7 @@ function addBaseElement<T extends Element>({
     _status: 0,
     connectedWires: [],
     ...additionalProps,
-  } satisfies Element);
+  } as Element);
 }
 
 function addExtensionElement({
@@ -1032,7 +1039,7 @@ const handler = createMcpHandler((server) => {
       if (!circuit) {
         throw new Error("No circuit loaded");
       }
-      return { content: [{ data: [serialize(circuit)] }] }; // something something
+      return { content: [{ type: "text" as const, text: serialize(circuit) }] };
     },
   );
 });
