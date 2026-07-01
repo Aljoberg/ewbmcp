@@ -1,26 +1,31 @@
-import type {
-  AcCurrentSource,
-  AcVoltageSource,
-  Ammeter,
-  Battery,
-  Capacitor,
-  ConfigBlock,
-  ConfigValue,
-  CurrentControlledSwitch,
-  DcCurrentSource,
-  DigitalNode,
-  Element,
-  ExtComp,
-  Fuse,
-  Inductor,
-  Instrument,
-  Project51,
-  Relay,
-  Resistor,
-  Switch,
-  TimeDelaySwitch,
-  VoltageControlledSwitch,
-  Voltmeter,
+import {
+  ElementType,
+  type AcCurrentSource,
+  type AcVoltageSource,
+  type Ammeter,
+  type Battery,
+  type Capacitor,
+  type ChangedWire,
+  type Comp,
+  type ConfigBlock,
+  type ConfigValue,
+  type CurrentControlledSwitch,
+  type DcCurrentSource,
+  type DeserializedCircuit,
+  type DigitalNode,
+  type Element,
+  type Elements,
+  type ExtComp,
+  type Fuse,
+  type Inductor,
+  type Instrument,
+  type Project51,
+  type Relay,
+  type Resistor,
+  type Switch,
+  type TimeDelaySwitch,
+  type VoltageControlledSwitch,
+  type Voltmeter,
 } from "./types";
 
 const DELIMITERS = [0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20];
@@ -80,6 +85,13 @@ enum PartNum {
   NODE,
   IC_TEMP,
   SUB_TEMP,
+}
+
+export enum WireDirection {
+  RIGHT = 1,
+  UP = 2,
+  LEFT = 4, // probably
+  DOWN = 8,
 }
 
 class Stream {
@@ -158,7 +170,7 @@ class Stream {
   }
 }
 
-function parse(data: Uint8Array) {
+export function parse(data: Uint8Array) {
   const stream = new Stream(data);
 
   function parseOne(parent: ConfigBlock) {
@@ -255,14 +267,6 @@ function parse(data: Uint8Array) {
   return root;
 }
 
-const contents = await Bun.file(process.argv[2]!).bytes();
-
-const parsed = parse(contents) as unknown as { Project_5_1: Project51 }; // fuck you typescript
-
-console.dir(parsed, { depth: null });
-
-Bun.file("output.json").write(JSON.stringify(parsed, null, 2));
-
 function toArray<T>(v: T | T[] | undefined): T[] {
   if (v === undefined) return [];
   return Array.isArray(v) ? v : [v];
@@ -270,171 +274,607 @@ function toArray<T>(v: T | T[] | undefined): T[] {
 
 const MULTIPLIERS = [0, 1000, 1000000, 1000000000];
 
-const elementsComp = parsed.Project_5_1.Circuit.Elements.Comp;
+function deserialize(contents: Uint8Array) {
+  const parsed = parse(contents) as unknown as { Project_5_1: Project51 }; // fuck you typescript
 
-const changedElements: Element[] = [];
+  Bun.file("output.json").write(JSON.stringify(parsed, null, 2));
 
-for (const comp of elementsComp) {
-  let data: Record<string, unknown> = {};
-  const v = comp.Value;
-  const pn = comp.PartNum;
-  let multipliers: Resistor["multipliers"] | null = null; // ig
+  const elementsComp = parsed.Project_5_1.Circuit.Elements.Comp;
 
-  switch (pn) {
-    case PartNum.AC_VOLTAGE_SOURCE:
-      data = {
-        peakVoltage: v[0],
-        frequency: v[1],
-        phase: v[2],
-      } as AcVoltageSource["data"];
-      break;
-    case PartNum.RESISTOR:
-      data = {
-        resistance: v[0],
-        TC1: v[1],
-        TC2: v[2],
-        Tnom: v[3],
-      } as Resistor["data"];
-      if (comp.ModelUnits.length === 1) {
-        const mult = MULTIPLIERS[comp.ModelUnits[0]!]!;
-        multipliers = {
-          resistance: mult,
-          TC1: mult,
-          TC2: mult,
-          Tnom: mult,
-        };
-      } else
-        multipliers = {
-          resistance: MULTIPLIERS[comp.ModelUnits[0]!]!,
-          TC1: MULTIPLIERS[comp.ModelUnits[1]!]!,
-          TC2: MULTIPLIERS[comp.ModelUnits[2]!]!,
-          Tnom: MULTIPLIERS[comp.ModelUnits[3]!]!,
-        };
-      break;
-    case PartNum.BATTERY:
-      data = { voltage: v[0] } as Battery["data"];
-      break;
-    case PartNum.CAPACITOR:
-      data = { capacitance: v[0] } as Capacitor["data"];
-      break;
-    case PartNum.INDUCTOR:
-      data = { inductance: v[0] } as Inductor["data"];
-      break;
-    case PartNum.AC_CURRENT_SOURCE:
-      data = {
-        peakCurrent: v[0],
-        frequency: v[1],
-        phase: v[2],
-      } as AcCurrentSource["data"];
-      break;
-    case PartNum.DC_CURRENT_SOURCE:
-      data = { current: v[0] } as DcCurrentSource["data"];
-      break;
-    case PartNum.AMMETER:
-      data = { mode: v[0] } as Ammeter["data"];
-      break;
-    case PartNum.VOLTMETER:
-      data = { mode: v[0] } as Voltmeter["data"];
-      break;
-    case PartNum.FUSE:
-      data = { rating: v[0], responseTime: v[1] ?? 0 } as Fuse["data"];
-      break;
-    case PartNum.RELAY:
-      data = {
-        pickupVoltage: v[0],
-        dropoutVoltage: v[1],
-        pickupTime: v[2],
-        dropoutTime: v[3],
-      } as Relay["data"];
-      break;
-    case PartNum.TIME_DELAY_SWITCH:
-      data = {
-        tOn: v[0],
-        tOff: v[1],
-        delayOn: v[2],
-        delayOff: v[3],
-      } as TimeDelaySwitch["data"];
-      break;
-    case PartNum.VOLTAGE_CONTROLLED_SWITCH:
-      data = {
-        rOn: v[0],
-        rOff: v[1],
-        threshold: v[2],
-      } as VoltageControlledSwitch["data"];
-      break;
-    case PartNum.CURRENT_CONTROLLED_SWITCH:
-      data = {
-        rOn: v[0],
-        rOff: v[1],
-        threshold: v[2],
-      } as CurrentControlledSwitch["data"];
-      break;
-    case PartNum.SWITCH:
-      data = { initialState: v[0] ?? 0 } as Switch["data"];
-      break;
-    case PartNum.NODE:
-      data = {
-        m_tptrElem:
-          (comp as unknown as Record<string, unknown>).m_tptrElem ?? "",
-        m_flags: (comp as unknown as Record<string, unknown>).m_flags ?? 0,
-      } as DigitalNode["data"];
-      break;
+  //   // Wires (flat indices refer to element order in .out file, NOT changedElements index)
+  //   console.log(
+  //     `\n--- WIRES (${toArray(parsed.Project_5_1.Circuit.Wires.wire).length}) ---`,
+  //   );
+  //   for (const w of toArray(parsed.Project_5_1.Circuit.Wires.wire)) {
+  //     console.log(
+  //       `  [${w.pos[0]}:${w.pos[1]}] --node=${w.node_p}--> [${w.pos[2]}:${w.pos[3]}]  segs=[${w.segs}]`,
+  //     );
+  //   }
+
+  const changedWires: ChangedWire[] = toArray(
+    parsed.Project_5_1.Circuit.Wires.wire,
+  ).map((wire) => ({
+    firstEndpoint: {
+      elementIndex: wire.pos[0],
+      pin: wire.pos[1],
+    },
+    secondEndpoint: {
+      elementIndex: wire.pos[2],
+      pin: wire.pos[3],
+    },
+    segments: Array.from(
+      { length: Math.floor(wire.segs.length / 2) },
+      (_, i) => ({
+        direction: wire.segs[i * 2]!,
+        length: wire.segs[i * 2 + 1]!,
+      }),
+    ),
+    color: wire.colour,
+    wireId: wire.wire_id,
+    nodeP: wire.node_p,
+    xFactor: wire.x_factor,
+    yFactor: wire.y_factor,
+  }));
+
+  function getConnectedWireIds(elementIndex: number) {
+    return changedWires
+      .filter(
+        (w) =>
+          w.firstEndpoint.elementIndex === elementIndex ||
+          w.secondEndpoint.elementIndex === elementIndex,
+      )
+      .map((w) => w.wireId);
   }
 
-  const obj = {
-    name: PartNum[pn]!,
-    rotation: comp.Position[0]!,
-    x: comp.Position[1]!,
-    y: comp.Position[2]!,
-    refId: comp.Common.RefID,
-    modelName: comp.ModelName || "ideal",
-    // multipliers: [...comp.ModelUnits],
-    data,
-  };
+  console.dir(changedWires, { depth: null });
 
-  if (multipliers) (obj as Resistor).multipliers = multipliers;
+  const changedElements: Element[] = [];
 
-  changedElements.push(obj);
+  // Process elements in flat file order (iterate Elements keys in insertion order)
+  const elementsData = parsed.Project_5_1.Circuit.Elements;
+  for (const [typeName, elems] of Object.entries(elementsData)) {
+    for (const raw of toArray(elems)) {
+      if (typeName === "Comp") {
+        const comp = raw as Comp;
+        const v = comp.Value;
+        const pn = comp.PartNum;
+        let data: Record<string, unknown> = {};
+        let multipliers: Resistor["multipliers"] | null = null;
+
+        if (v)
+          switch (pn) {
+            case PartNum.AC_VOLTAGE_SOURCE:
+              data = {
+                peakVoltage: v[0],
+                frequency: v[1],
+                phase: v[2],
+              } as AcVoltageSource["data"];
+              break;
+            case PartNum.RESISTOR:
+              data = {
+                resistance: v[0],
+                TC1: v[1],
+                TC2: v[2],
+                Tnom: v[3],
+              } as Resistor["data"];
+              if (comp.ModelUnits.length === 1) {
+                const mult = MULTIPLIERS[comp.ModelUnits[0]!]!;
+                multipliers = {
+                  resistance: mult,
+                  TC1: mult,
+                  TC2: mult,
+                  Tnom: mult,
+                };
+              } else {
+                multipliers = {
+                  resistance: MULTIPLIERS[comp.ModelUnits[0]!]!,
+                  TC1: MULTIPLIERS[comp.ModelUnits[1]!]!,
+                  TC2: MULTIPLIERS[comp.ModelUnits[2]!]!,
+                  Tnom: MULTIPLIERS[comp.ModelUnits[3]!]!,
+                };
+              }
+              break;
+            case PartNum.BATTERY:
+              data = { voltage: v[0] } as Battery["data"];
+              break;
+            case PartNum.CAPACITOR:
+              data = { capacitance: v[0] } as Capacitor["data"];
+              break;
+            case PartNum.INDUCTOR:
+              data = { inductance: v[0] } as Inductor["data"];
+              break;
+            case PartNum.AC_CURRENT_SOURCE:
+              data = {
+                peakCurrent: v[0],
+                frequency: v[1],
+                phase: v[2],
+              } as AcCurrentSource["data"];
+              break;
+            case PartNum.DC_CURRENT_SOURCE:
+              data = { current: v[0] } as DcCurrentSource["data"];
+              break;
+            case PartNum.AMMETER:
+              data = { mode: v[0] } as Ammeter["data"];
+              break;
+            case PartNum.VOLTMETER:
+              data = { mode: v[0] } as Voltmeter["data"];
+              break;
+            case PartNum.FUSE:
+              data = { rating: v[0], responseTime: v[1] ?? 0 } as Fuse["data"];
+              break;
+            case PartNum.RELAY:
+              data = {
+                pickupVoltage: v[0],
+                dropoutVoltage: v[1],
+                pickupTime: v[2],
+                dropoutTime: v[3],
+              } as Relay["data"];
+              break;
+            case PartNum.TIME_DELAY_SWITCH:
+              data = {
+                tOn: v[0],
+                tOff: v[1],
+                delayOn: v[2],
+                delayOff: v[3],
+              } as TimeDelaySwitch["data"];
+              break;
+            case PartNum.VOLTAGE_CONTROLLED_SWITCH:
+              data = {
+                rOn: v[0],
+                rOff: v[1],
+                threshold: v[2],
+              } as VoltageControlledSwitch["data"];
+              break;
+            case PartNum.CURRENT_CONTROLLED_SWITCH:
+              data = {
+                rOn: v[0],
+                rOff: v[1],
+                threshold: v[2],
+              } as CurrentControlledSwitch["data"];
+              break;
+            case PartNum.SWITCH:
+              data = { initialState: v[0] ?? 0 } as Switch["data"];
+              break;
+          }
+        else if (pn === PartNum.NODE) {
+          data = {
+            m_tptrElem:
+              (comp as unknown as Record<string, unknown>).m_tptrElem ?? "",
+            m_flags: (comp as unknown as Record<string, unknown>).m_flags ?? 0,
+          } as DigitalNode["data"];
+        }
+
+        // Collect extra raw properties not captured by typed fields
+        const knownKeys = new Set([
+          "PartNum",
+          "Position",
+          "Value",
+          "ModelUnits",
+          "Common",
+          "ModelName",
+          "Status",
+        ]);
+        const rawExtra: Record<string, unknown> = {};
+        for (const [k, val] of Object.entries(comp)) {
+          if (!knownKeys.has(k)) rawExtra[k] = val;
+        }
+
+        const obj: Element = {
+          name: PartNum[pn]!,
+          rotation: comp.Position[0]!,
+          x: comp.Position[1]!,
+          y: comp.Position[2]!,
+          refId: comp.Common.RefID,
+          modelName: comp.ModelName || "ideal",
+          data,
+          connectedWires: getConnectedWireIds(changedElements.length),
+          type: ElementType.BASE,
+          _value: v ? [...v] : null,
+          _modelUnits: [...comp.ModelUnits],
+          _status: comp.Status,
+          _raw: rawExtra,
+        };
+        if (multipliers) (obj as Resistor).multipliers = multipliers;
+        changedElements.push(obj);
+      } else if (typeName === "ExtComp") {
+        const comp = raw as ExtComp;
+        const v = comp.Value ?? [];
+
+        changedElements.push({
+          name: comp.Name,
+          rotation: comp.Position[0]!,
+          x: comp.Position[1]!,
+          y: comp.Position[2]!,
+          refId: comp.Common.RefID,
+          modelName: comp.ModelName || "ideal",
+          data: { value: v, data: comp.Data ?? "" },
+          connectedWires: getConnectedWireIds(changedElements.length),
+          type: ElementType.EXTENSION,
+          _value: [...v],
+          _modelUnits: comp.ModelUnits ? [...comp.ModelUnits] : [],
+          _status: comp.Status,
+          _raw: { Data: comp.Data ?? "" },
+        } satisfies Element);
+      } else if (typeName === "Instrument") {
+        const inst = raw as Instrument;
+
+        changedElements.push({
+          name: "Instrument",
+          rotation: inst.Pos[0]!,
+          x: inst.Pos[1]!,
+          y: inst.Pos[2]!,
+          refId: undefined,
+          modelName: "ideal",
+          data: {},
+          connectedWires: getConnectedWireIds(changedElements.length),
+          type: ElementType.INSTRUMENT,
+          _value: [],
+          _modelUnits: [],
+          _status: 0,
+          _raw: {},
+        } satisfies Element);
+      }
+    }
+  }
+
+  return {
+    elements: changedElements,
+    wires: changedWires,
+  } satisfies DeserializedCircuit;
 }
 
-for (const comp of toArray(parsed.Project_5_1.Circuit.Elements.ExtComp)) {
-  const name = comp.Name;
-  const v = comp.Value ?? [];
-  const prefix = name.split(":")[0]!;
+if (import.meta.main) {
+  const contents = await Bun.file(process.argv[2]!).bytes();
 
-  changedElements.push({
-    name,
-    rotation: comp.Position[0]!,
-    x: comp.Position[1]!,
-    y: comp.Position[2]!,
-    refId: comp.Common.RefID,
-    modelName: comp.ModelName || "ideal",
-    // multipliers: [...comp.ModelUnits],
-    data: { value: v, data: comp.Data ?? "" },
+  const circuit = deserialize(contents);
+  console.dir(circuit, { depth: null });
+
+  Bun.file("output.ewb").write(serialize(circuit));
+}
+
+function quote(s: string) {
+  // Escape backslashes and quotes for A/R string format
+  const escaped = s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
+function serialize({ elements, wires }: DeserializedCircuit) {
+  const out: string[] = [];
+
+  function emit(line: string = "", indent: number = 0) {
+    if (line) out.push(" ".repeat(indent) + line);
+    else out.push("");
+  }
+
+  function emitBlock(name: string, indent: number, fn: () => void) {
+    emit(name, indent);
+    emit("{", indent);
+    fn();
+    emit("}", indent);
+  }
+
+  // Build Elements block
+  emit("", 0);
+  emitBlock("Elements", 4, () => {
+    for (const elem of elements) {
+      if (elem.type === ElementType.BASE) {
+        const pn = PartNum[elem.name as keyof typeof PartNum];
+        emitBlock(elem.type, 6, () => {
+          emit(`PartNum i ${pn}`, 8);
+          emit(`Position i:3 ${elem.rotation} ${elem.x} ${elem.y}`, 8);
+          if (elem._value)
+            emit(`Value r:${elem._value.length} ${elem._value.join(" ")}`, 8);
+          emit(
+            `ModelUnits i:${elem._modelUnits.length} ${elem._modelUnits.join(" ")}`,
+            8,
+          );
+          emitBlock("Common", 8, () => {
+            emit(`RefID A ${quote(elem.refId ?? "")}`, 10);
+          });
+          if (elem.modelName) {
+            emit(`ModelName R ${quote(elem.modelName)}`, 8);
+          }
+          emit(`Status i ${elem._status}`, 8);
+          // Extra raw properties
+          for (const [k, val] of Object.entries(elem._raw)) {
+            if (typeof val === "number") emit(`${k} i ${val}`, 8);
+            else if (typeof val === "string") emit(`${k} A ${quote(val)}`, 8);
+            else if (Array.isArray(val))
+              emit(`${k} i:${val.length} ${val.join(" ")}`, 8);
+          }
+        });
+      } else if (elem.type === ElementType.EXTENSION) {
+        emitBlock(elem.type, 6, () => {
+          emit(`Name R ${quote(elem.name)}`, 8);
+          emit(`Position i:3 ${elem.rotation} ${elem.x} ${elem.y}`, 8);
+          if (elem._value && elem._value.length > 0) {
+            emit(`Value r:${elem._value.length} ${elem._value.join(" ")}`, 8);
+          }
+          emit(
+            `ModelUnits i:${elem._modelUnits.length} ${elem._modelUnits.join(" ")}`,
+            8,
+          );
+          emitBlock("Common", 8, () => {
+            emit(`RefID A ${quote(elem.refId ?? "")}`, 10);
+          });
+          const dataStr = elem._raw.Data as string | undefined;
+          if (dataStr) emit(`Data R ${quote(dataStr)}`, 8);
+          if (elem.modelName) emit(`ModelName R ${quote(elem.modelName)}`, 8);
+          emit(`Status i ${elem._status}`, 8);
+        });
+      } else if (elem.type === ElementType.INSTRUMENT) {
+        emitBlock("Instrument", 6, () => {
+          emit(`PartNum i 6`, 8);
+          emit(`Pos i:3 ${elem.rotation} ${elem.x} ${elem.y}`, 8);
+        });
+      }
+    }
   });
-}
 
-for (const inst of toArray(parsed.Project_5_1.Circuit.Elements.Instrument)) {
-  changedElements.push({
-    name: "Instrument",
-    rotation: inst.Pos[0]!,
-    x: inst.Pos[1]!,
-    y: inst.Pos[2]!,
-    refId: undefined,
-    modelName: "ideal",
-    // multipliers: [],
-    data: {},
+  // Build Wires block
+  emitBlock("Wires", 4, () => {
+    for (const wire of wires) {
+      emitBlock("wire", 6, () => {
+        emit(
+          `pos i:4 ${wire.firstEndpoint.elementIndex} ${wire.firstEndpoint.pin} ${wire.secondEndpoint.elementIndex} ${wire.secondEndpoint.pin}`,
+          8,
+        );
+        const flatSegs = wire.segments.flatMap((s) => [s.direction, s.length]);
+        emit(`segs i:${flatSegs.length} ${flatSegs.join(" ")}`, 8);
+        emit(`colour i ${wire.color}`, 8);
+        emit(`wire_id i ${wire.wireId}`, 8);
+        emit(`node_p A ${quote(wire.nodeP)}`, 8);
+        emit(`x_factor r ${wire.xFactor}`, 8);
+        emit(`y_factor r ${wire.yFactor}`, 8);
+      });
+    }
   });
+
+  const elementsAndWires = out.join("\r\n");
+
+  const TEMPLATE = `Project_5_1 
+{ 
+  CircuitHeader 
+  { 
+    InternalCircuitVersion i 511 
+    ZoomFactor i 80 
+    VersionSpecific 
+    { 
+      SerialNo R "\\"RBS-1999-RBS\\""
+        "" 
+      Version R "Version 5.12" 
+      Ewb_Restrictions 
+      { 
+        Name R "Global Restrictions" 
+        CircPass R "" 
+        Path R "c:\\users\\aljob\\downloads\\electronics-workbench-ewb-5.12-main\\ewb512" 
+        RelaxAll i 0 
+        Override i 0 
+        NoPrint i 0 
+        ReadOnly i 0 
+        NoFaults i 0 
+        NoSub i 0 
+        NoValues i 0 
+        NoModel i 0 
+        NoDisp i 0 
+        NoCAnal i 0 
+        NoParts i 0 
+        NoInst i 0 
+        NoFav i 0 
+        PBOpt i 1 
+        ANOpt i 1 
+        NoAnal i:14 1 1 1 1 1 1 1 1 1 1 1 1 1 1 
+      }
+    }
+    Library 
+    { 
+      Name R "$" 
+    }
+    PrintSettings 
+    { 
+      Choices i:13 0 0 0 0 0 0 0 0 0 0 0 0 0 
+      WkSpacePageBrk i 0 
+      MacroPageBrk i 0 
+      PrintZoom i 2000 
+    }
+  }
+  Circuit 
+  { 
+    Preferences 
+    { 
+      Mode i 16 
+      Info i:10 1 0 100 1 0 1 1 1 10485760 0 
+      ShowNodes i 0 
+      Fonts 
+      { 
+        Label 
+        { 
+          Name R "Arial" 
+          Size i -15 
+          Type i 0 
+          Color i 16711680 
+        }
+        Model 
+        { 
+          Name R "Arial" 
+          Size i -15 
+          Type i 0 
+          Color i 16711680 
+        }
+      }
+      Wiring 
+      { 
+        Manual i 0 
+        Auto i 1 
+        AutoModed i 0 
+        Reroute i 1 
+        Still i 0 
+        AutoDelete i 1 
+      }
+    }
+    __ELEMENTS_WIRES__
+    InstSettings 
+    { 
+      MultiMeter 
+      { 
+        Mode i 2 
+        InpType i 2 
+        Value r:4 1 1 0.01 1 
+        Scale i:4 1 3 0 2 
+      }
+      FuncGen 
+      { 
+        Mode i 1 
+        Wave r:4 1 50 10 0 
+        Symmetry i -1 
+        Units i:2 0 2 
+      }
+      Oscilloscope 
+      { 
+        Pos i:6 0 29 1 4 0 1 
+        Value i:6 17 0 3 17 0 3 
+        Size i 0 
+      }
+      Bode 
+      { 
+        Data i:15 -1 -1 0 30 0 10 0 30 1 1 1 10 0 10 4 
+      }
+      WordGen 
+      { 
+        Pattern 
+        { 
+          Initial i 0 
+          Final i 999 
+        }
+        Data i:5 3 1 1 10 1 
+      }
+      TruthTable 
+      { 
+        BoolExpr A "" 
+        Mask i 0 
+      }
+      LogicAnalyzer 
+      { 
+        Values i:5 1 21 0 2 2 
+        ClockMode i 0 
+        Pattern A "xxxxxxxxxxxxxxxx" 
+        Pattern A "xxxxxxxxxxxxxxxx" 
+        Pattern A "xxxxxxxxxxxxxxxx" 
+        ClksPerDiv i 0 
+        LogicFrequency r:16 10 1 4.45619e-313 4.24399e-314 3.74267e-308 5.30245e-307 2.9708e-312 5.32741e-307 2.1171e-284 2.11816e-284 2.11706e-284 3.74274e-308 1.34774e-295 2.114e-284 3.74282e-308 5.33269e-307 
+      }
+    }
+    WindowInfo 
+    { 
+      Position i:14 0 7 32 2033 947 -93 -393 2200 1700 0 0 0 0 0 
+    }
+    InstPos 
+    { 
+      Oscilloscope i:3 0 22 1 
+      FuncGen i:3 6 22 1 
+      Oscilloscope i:3 2 25 1 
+      MultiMeter i:3 11 24 1 
+      WordGen i:3 9 22 1 
+      LogicAnalyzer i:3 9 22 1 
+      TruthTable i:3 3 22 1 
+      Bode i:3 8 23 1 
+    }
+    PBPos 
+    { 
+      PBNum i:6 0 2 0 68 70 134 
+      PBNum i:6 1 0 55 68 461 177 
+      PBNum i:6 2 1 86 68 461 177 
+      PBNum i:6 3 0 117 68 391 142 
+      PBNum i:6 4 2 148 68 430 177 
+      PBNum i:6 5 2 187 68 391 142 
+      PBNum i:6 6 2 218 68 391 142 
+      PBNum i:6 7 2 249 68 453 142 
+      PBNum i:6 8 2 288 68 616 177 
+      PBNum i:6 9 2 319 68 554 177 
+      PBNum i:6 10 2 358 68 663 142 
+      PBNum i:6 11 2 389 68 803 142 
+      PBNum i:6 12 2 420 68 857 142 
+      PBNum i:6 13 2 459 68 694 142 
+      PBNum i:6 14 2 -8 995 62 1061 
+      PBNum i:6 15 2 -8 995 62 1061 
+      PBNum i:6 16 2 -8 995 62 1061 
+      PBNum i:6 17 2 -8 995 62 1061 
+    }
+    GrapherInfo 
+    { 
+      Shown i 0 
+    }
+    SimulationOptions 
+    { 
+      tolerance r 0.1 
+      time_step r 3.5 
+      abstol r 1e-12 
+      chgtol r 1e-14 
+      convabsstep r 0.1 
+      convstep r 0.25 
+      defad r 0 
+      defas r 0 
+      defl r 0.0001 
+      defw r 0.0001 
+      gmin r 1e-12 
+      pivrel r 0.001 
+      pivtol r 1e-13 
+      ramptime r 0 
+      reltol r 0.001 
+      rshunt r 1e+12 
+      temp r 27 
+      tnom r 27 
+      trtol r 7 
+      vntol r 1e-06 
+      tstep r 1e-05 
+      tmax r 1e-05 
+      thresh_volt r 3.5 
+      globTemp r 3.5 
+      bode_num_points i 100 
+      auto_tmax i 1 
+      tmax_enab i 0 
+      tpoints i 100 
+      uic i 2 
+      display_opt_enab i 1 
+      pre_trigger i 100 
+      post_trigger i 1000 
+      noopalter i 1 
+      convlimit i 1 
+      out_of_memory i 0 
+      steady_state i 1 
+      precision i 1 
+      force_AC i 0 
+      zero_init_cond i 0 
+      time_step_index i 1 
+      iterations i 100 
+      anal_auto i 0 
+      pause_at_end_of_screen i 0 
+      num_points i 100 
+      same_steps i 1 
+      convabstep_enab i 0 
+      convstep_enab i 0 
+      gminsteps i 10 
+      itl1 i 100 
+      itl2 i 50 
+      itl4 i 25 
+      itl6 i 10 
+      maxevtiter_enab i 0 
+      maxevtiter i 2000 
+      maxopalter_enab i 0 
+      maxopalter i 1000 
+      maxord i 2 
+      rshunt_enab i 1 
+      srcsteps i 10 
+      acct i 1 
+      bypass i 1 
+      noOpIter i 0 
+      tryToCompact i 0 
+      integrateMethod i 1 
+      eng_notation i 1 
+    }
+  }
 }
+`;
 
-console.dir(changedElements, { depth: null });
-
-// Wires (flat indices refer to element order in .out file, NOT changedElements index)
-console.log(
-  `\n--- WIRES (${toArray(parsed.Project_5_1.Circuit.Wires.wire).length}) ---`,
-);
-for (const w of toArray(parsed.Project_5_1.Circuit.Wires.wire)) {
-  console.log(
-    `  [${w.pos[0]}:${w.pos[1]}] --node=${w.node_p}--> [${w.pos[2]}:${w.pos[3]}]  segs=[${w.segs}]`,
-  );
+  return TEMPLATE.replace("__ELEMENTS_WIRES__", elementsAndWires);
 }

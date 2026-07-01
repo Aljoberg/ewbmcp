@@ -1,4 +1,5 @@
 import type { MultiplicativeOperator } from "typescript";
+import type { WireDirection } from ".";
 
 export interface ConfigBlock extends Record<string, ConfigValue> {}
 
@@ -137,7 +138,7 @@ export interface Elements {
 export interface Comp {
   PartNum: number;
   Position: number[];
-  Value: number[];
+  Value?: number[];
   ModelUnits: number[];
   Common: Common;
   ModelName?: string;
@@ -347,6 +348,12 @@ export interface SimulationOptions {
   eng_notation: number;
 }
 
+export const enum ElementType {
+  BASE = "Comp", // Comp
+  EXTENSION = "ExtComp", // ExtComp
+  INSTRUMENT = "Instrument", // Instrument
+}
+
 export interface Element {
   name: string;
   rotation: number;
@@ -354,8 +361,18 @@ export interface Element {
   y: number;
   refId?: string;
   modelName: string;
-  // multipliers: number[];
   data: Record<string, unknown>;
+  /** Array of wire IDs connected to this element, ordered by pin index. */
+  connectedWires: number[];
+  type: ElementType;
+  /** Raw Value array for serialization. */
+  _value: number[] | null;
+  /** Raw ModelUnits array for serialization. */
+  _modelUnits: number[];
+  /** Status field. */
+  _status: number;
+  /** Catch-all for extra raw properties not in the typed interface (e.g. m_tptrElem). */
+  _raw: Record<string, unknown>;
 }
 
 export interface AcVoltageSource extends Element {
@@ -485,4 +502,30 @@ export interface DigitalNode extends Element {
     m_tptrElem: string;
     m_flags: number;
   };
+}
+
+export interface ChangedWire {
+  firstEndpoint: {
+    elementIndex: number;
+    pin: number;
+  };
+  secondEndpoint: {
+    elementIndex: number;
+    pin: number;
+  };
+  segments: {
+    direction: WireDirection;
+    length: number;
+  }[];
+  color: number;
+  wireId: number;
+  nodeP: string;
+  xFactor: number;
+  yFactor: number;
+}
+
+export interface DeserializedCircuit {
+  elements: Element[];
+  wires: ChangedWire[];
+  // more tba
 }
