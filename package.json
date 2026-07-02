@@ -7,9 +7,12 @@
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "elysia": "^1.4.29",
+    "express": "^5.2.1",
     "mcp-handler": "^1.1.0",
     "zod": "^4.4.3"
   }

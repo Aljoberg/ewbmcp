@@ -3,9 +3,10 @@ import { z } from "zod";
 // misc
 
 export const loadFileSchema = z.object({
-    status: z.enum(["success", "error"]),
-    length: z.number()
-})
+  status: z.string(),
+  length: z.number().optional(),
+  errorMessage: z.string().optional(),
+});
 
 // wires
 
@@ -216,7 +217,9 @@ export const findOutputSchema = z.object({
 });
 
 export const elementDataOutputSchema = z.object({
-  element: z.string(),
-  index: z.number(),
-  data: z.record(z.string(), z.unknown()),
+  status: z.string(),
+  element: z.string().optional(),
+  index: z.number().optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
+  errorMessage: z.string().optional(),
 });
