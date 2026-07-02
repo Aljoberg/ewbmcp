@@ -29,6 +29,25 @@ import {
 } from "./types";
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
+import {
+  acCurrentSourceSchema,
+  acVoltageSourceSchema,
+  ammeterSchema,
+  batterySchema,
+  capacitorSchema,
+  currentControlledSwitchSchema,
+  dcCurrentSourceSchema,
+  fuseSchema,
+  inductorSchema,
+  relaySchema,
+  resistorSchema,
+  rotationSchema,
+  switchSchema,
+  timeDelaySwitchSchema,
+  voltageControlledSwitchSchema,
+  voltmeterSchema,
+  type wireSchema,
+} from "./schemas";
 
 const DELIMITERS = [0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20];
 
@@ -953,559 +972,479 @@ function addExtensionElement({
   } satisfies Element);
 }
 
+function addWire({
+  circuit,
+  firstEndpoint,
+  secondEndpoint,
+  segments,
+  color,
+}: {
+  circuit: DeserializedCircuit;
+} & z.infer<typeof wireSchema>) {
+  circuit.wires.push({
+    firstEndpoint,
+    secondEndpoint,
+    segments: segments.map(({ direction, length }) => ({
+      direction: WireDirection[direction],
+      length,
+    })),
+    color,
+    nodeP: "", // tbc
+    wireId: circuit.wires.length,
+    xFactor: 1,
+    yFactor: 1,
+  });
+}
+
 function multiplierIndex(mult: number): number {
   return mult >= 1000000000 ? 3 : mult >= 1000000 ? 2 : mult >= 1000 ? 1 : 0;
 }
 
-const rotationSchema = z.union([
-  z.literal(0),
-  z.literal(90),
-  z.literal(180),
-  z.literal(270),
-]);
-
-// const handler = createMcpHandler((server) => {
-//   let circuit: DeserializedCircuit | null = null;
-
-//   function c() {
-//     if (!circuit) throw new Error("No circuit loaded");
-//     return circuit;
-//   }
-
-//   function el(name: string, details: Record<string, unknown>) {
-//     return {
-//       content: [
-//         {
-//           type: "text" as const,
-//           text: JSON.stringify(
-//             { element: name, index: circuit!.elements.length - 1, ...details },
-//             null,
-//             2,
-//           ),
-//         },
-//       ],
-//     };
-//   }
-
-//   server.registerTool(
-//     "ewb_load_file",
-//     { description: "Load an EWB circuit file", inputSchema: z.string() },
-//     async (fileContents) => {
-//       circuit = deserialize(
-//         new Uint8Array(fileContents.split("").map((c) => c.charCodeAt(0))),
-//       );
-//       return { content: [] };
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_resistor",
-//     {
-//       description: "Add a resistor to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         resistance: z.number(),
-//         resistanceMultiplier: z
-//           .union([
-//             z.literal(1),
-//             z.literal(1000),
-//             z.literal(1000000),
-//             z.literal(1000000000),
-//           ])
-//           .optional()
-//           .default(1),
-//       }),
-//     },
-//     async ({ rotation, x, y, resistance, resistanceMultiplier }) => {
-//       c();
-//       addBaseElement<Resistor>({
-//         circuit: circuit!,
-//         name: "RESISTOR",
-//         rotation,
-//         x,
-//         y,
-//         data: { resistance, TC1: 0, TC2: 0, Tnom: 5 },
-//         multipliers: {
-//           resistance: resistanceMultiplier,
-//           TC1: 0,
-//           TC2: 0,
-//           Tnom: 0,
-//         },
-//         _modelUnits: [multiplierIndex(resistanceMultiplier), 0, 0, 0],
-//       });
-//       return el("Resistor", {
-//         position: { x, y },
-//         rotation,
-//         resistance,
-//         multiplier: resistanceMultiplier,
-//       });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_battery",
-//     {
-//       description: "Add a battery (DC voltage source) to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         voltage: z.number(),
-//       }),
-//     },
-//     async ({ rotation, x, y, voltage }) => {
-//       c();
-//       addBaseElement<Battery>({
-//         circuit: circuit!,
-//         name: "BATTERY",
-//         rotation,
-//         x,
-//         y,
-//         data: { voltage },
-//       });
-//       return el("Battery", { position: { x, y }, rotation, voltage });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_capacitor",
-//     {
-//       description: "Add a capacitor to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         capacitance: z.number(),
-//         multiplier: z
-//           .union([
-//             z.literal(1),
-//             z.literal(1000),
-//             z.literal(1000000),
-//             z.literal(1000000000),
-//           ])
-//           .optional()
-//           .default(1),
-//       }),
-//     },
-//     async ({ rotation, x, y, capacitance, multiplier }) => {
-//       c();
-//       addBaseElement<Capacitor>({
-//         circuit: circuit!,
-//         name: "CAPACITOR",
-//         rotation,
-//         x,
-//         y,
-//         data: { capacitance },
-//         _modelUnits: [multiplierIndex(multiplier)],
-//       });
-//       return el("Capacitor", {
-//         position: { x, y },
-//         rotation,
-//         capacitance,
-//         multiplier,
-//       });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_inductor",
-//     {
-//       description: "Add an inductor to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         inductance: z.number(),
-//         multiplier: z
-//           .union([
-//             z.literal(1),
-//             z.literal(1000),
-//             z.literal(1000000),
-//             z.literal(1000000000),
-//           ])
-//           .optional()
-//           .default(1),
-//       }),
-//     },
-//     async ({ rotation, x, y, inductance, multiplier }) => {
-//       c();
-//       addBaseElement<Inductor>({
-//         circuit: circuit!,
-//         name: "INDUCTOR",
-//         rotation,
-//         x,
-//         y,
-//         data: { inductance },
-//         _modelUnits: [multiplierIndex(multiplier)],
-//       });
-//       return el("Inductor", {
-//         position: { x, y },
-//         rotation,
-//         inductance,
-//         multiplier,
-//       });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_ac_voltage_source",
-//     {
-//       description: "Add an AC voltage source to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         peakVoltage: z.number(),
-//         frequency: z.number(),
-//         phase: z.number(),
-//       }),
-//     },
-//     async ({ rotation, x, y, peakVoltage, frequency, phase }) => {
-//       c();
-//       addBaseElement<AcVoltageSource>({
-//         circuit: circuit!,
-//         name: "AC_VOLTAGE_SOURCE",
-//         rotation,
-//         x,
-//         y,
-//         data: { peakVoltage, frequency, phase },
-//       });
-//       return el("AC Voltage Source", {
-//         position: { x, y },
-//         rotation,
-//         peakVoltage,
-//         frequency,
-//         phase,
-//       });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_dc_current_source",
-//     {
-//       description: "Add a DC current source to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         current: z.number(),
-//       }),
-//     },
-//     async ({ rotation, x, y, current }) => {
-//       c();
-//       addBaseElement<DcCurrentSource>({
-//         circuit: circuit!,
-//         name: "DC_CURRENT_SOURCE",
-//         rotation,
-//         x,
-//         y,
-//         data: { current },
-//       });
-//       return el("DC Current Source", { position: { x, y }, rotation, current });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_ac_current_source",
-//     {
-//       description: "Add an AC current source to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         peakCurrent: z.number(),
-//         frequency: z.number(),
-//         phase: z.number(),
-//       }),
-//     },
-//     async ({ rotation, x, y, peakCurrent, frequency, phase }) => {
-//       c();
-//       addBaseElement<AcCurrentSource>({
-//         circuit: circuit!,
-//         name: "AC_CURRENT_SOURCE",
-//         rotation,
-//         x,
-//         y,
-//         data: { peakCurrent, frequency, phase },
-//       });
-//       return el("AC Current Source", {
-//         position: { x, y },
-//         rotation,
-//         peakCurrent,
-//         frequency,
-//         phase,
-//       });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_fuse",
-//     {
-//       description: "Add a fuse to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         rating: z.number(),
-//         responseTime: z.number().optional().default(0),
-//       }),
-//     },
-//     async ({ rotation, x, y, rating, responseTime }) => {
-//       c();
-//       addBaseElement<Fuse>({
-//         circuit: circuit!,
-//         name: "FUSE",
-//         rotation,
-//         x,
-//         y,
-//         data: { rating, responseTime },
-//       });
-//       return el("Fuse", { position: { x, y }, rotation, rating, responseTime });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_relay",
-//     {
-//       description: "Add a relay to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         pickupVoltage: z.number(),
-//         dropoutVoltage: z.number(),
-//         pickupTime: z.number(),
-//         dropoutTime: z.number(),
-//       }),
-//     },
-//     async ({
-//       rotation,
-//       x,
-//       y,
-//       pickupVoltage,
-//       dropoutVoltage,
-//       pickupTime,
-//       dropoutTime,
-//     }) => {
-//       c();
-//       addBaseElement<Relay>({
-//         circuit: circuit!,
-//         name: "RELAY",
-//         rotation,
-//         x,
-//         y,
-//         data: { pickupVoltage, dropoutVoltage, pickupTime, dropoutTime },
-//       });
-//       return el("Relay", {
-//         position: { x, y },
-//         rotation,
-//         pickupVoltage,
-//         dropoutVoltage,
-//         pickupTime,
-//         dropoutTime,
-//       });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_switch",
-//     {
-//       description: "Add a (normally open) switch to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         initialState: z
-//           .union([z.literal(0), z.literal(1)])
-//           .optional()
-//           .default(0),
-//       }),
-//     },
-//     async ({ rotation, x, y, initialState }) => {
-//       c();
-//       addBaseElement<Switch>({
-//         circuit: circuit!,
-//         name: "SWITCH",
-//         rotation,
-//         x,
-//         y,
-//         data: { initialState },
-//       });
-//       return el("Switch", { position: { x, y }, rotation, initialState });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_time_delay_switch",
-//     {
-//       description: "Add a time-delay switch to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         tOn: z.number(),
-//         tOff: z.number(),
-//         delayOn: z.number(),
-//         delayOff: z.number(),
-//       }),
-//     },
-//     async ({ rotation, x, y, tOn, tOff, delayOn, delayOff }) => {
-//       c();
-//       addBaseElement<TimeDelaySwitch>({
-//         circuit: circuit!,
-//         name: "TIME_DELAY_SWITCH",
-//         rotation,
-//         x,
-//         y,
-//         data: { tOn, tOff, delayOn, delayOff },
-//       });
-//       return el("Time-Delay Switch", {
-//         position: { x, y },
-//         rotation,
-//         tOn,
-//         tOff,
-//         delayOn,
-//         delayOff,
-//       });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_voltage_controlled_switch",
-//     {
-//       description: "Add a voltage-controlled switch to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         rOn: z.number(),
-//         rOff: z.number(),
-//         threshold: z.number(),
-//       }),
-//     },
-//     async ({ rotation, x, y, rOn, rOff, threshold }) => {
-//       c();
-//       addBaseElement<VoltageControlledSwitch>({
-//         circuit: circuit!,
-//         name: "VOLTAGE_CONTROLLED_SWITCH",
-//         rotation,
-//         x,
-//         y,
-//         data: { rOn, rOff, threshold },
-//       });
-//       return el("Voltage-Controlled Switch", {
-//         position: { x, y },
-//         rotation,
-//         rOn,
-//         rOff,
-//         threshold,
-//       });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_current_controlled_switch",
-//     {
-//       description: "Add a current-controlled switch to the circuit",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         rOn: z.number(),
-//         rOff: z.number(),
-//         threshold: z.number(),
-//       }),
-//     },
-//     async ({ rotation, x, y, rOn, rOff, threshold }) => {
-//       c();
-//       addBaseElement<CurrentControlledSwitch>({
-//         circuit: circuit!,
-//         name: "CURRENT_CONTROLLED_SWITCH",
-//         rotation,
-//         x,
-//         y,
-//         data: { rOn, rOff, threshold },
-//       });
-//       return el("Current-Controlled Switch", {
-//         position: { x, y },
-//         rotation,
-//         rOn,
-//         rOff,
-//         threshold,
-//       });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_ammeter",
-//     {
-//       description: "Add an ammeter to the circuit (mode: 0=DC, 1=AC)",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         mode: z
-//           .union([z.literal(0), z.literal(1)])
-//           .optional()
-//           .default(0),
-//       }),
-//     },
-//     async ({ rotation, x, y, mode }) => {
-//       c();
-//       addBaseElement<Ammeter>({
-//         circuit: circuit!,
-//         name: "AMMETER",
-//         rotation,
-//         x,
-//         y,
-//         data: { mode },
-//       });
-//       return el("Ammeter", { position: { x, y }, rotation, mode });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_add_voltmeter",
-//     {
-//       description: "Add a voltmeter to the circuit (mode: 0=DC, 1=AC)",
-//       inputSchema: z.object({
-//         rotation: rotationSchema,
-//         x: z.number(),
-//         y: z.number(),
-//         mode: z
-//           .union([z.literal(0), z.literal(1)])
-//           .optional()
-//           .default(0),
-//       }),
-//     },
-//     async ({ rotation, x, y, mode }) => {
-//       c();
-//       addBaseElement<Voltmeter>({
-//         circuit: circuit!,
-//         name: "VOLTMETER",
-//         rotation,
-//         x,
-//         y,
-//         data: { mode },
-//       });
-//       return el("Voltmeter", { position: { x, y }, rotation, mode });
-//     },
-//   );
-
-//   server.registerTool(
-//     "ewb_save_file",
-//     {
-//       description: "Save the current EWB circuit file",
-//       inputSchema: z.void(),
-//       outputSchema: z.object({ file: z.string() }),
-//     },
-//     async () => {
-//       c();
-//       return {
-//         content: [{ type: "text" as const, text: serialize(circuit!) }],
-//       };
-//     },
-//   );
-// });
+const handler = createMcpHandler((server) => {
+  let circuit: DeserializedCircuit | null = null;
+  function c() {
+    if (!circuit) throw new Error("No circuit loaded");
+    return circuit;
+  }
+  function el(name: string, details: Record<string, unknown>) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            { element: name, index: circuit!.elements.length - 1, ...details },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  }
+  server.registerTool(
+    "ewb_load_file",
+    { description: "Load an EWB circuit file", inputSchema: z.string() },
+    async (fileContents) => {
+      circuit = deserialize(
+        new Uint8Array(fileContents.split("").map((c) => c.charCodeAt(0))),
+      );
+      return { content: [] };
+    },
+  );
+  server.registerTool(
+    "ewb_add_resistor",
+    {
+      description: "Add a resistor to the circuit",
+      inputSchema: resistorSchema,
+    },
+    async ({ rotation, x, y, resistance, resistanceMultiplier }) => {
+      c();
+      addBaseElement<Resistor>({
+        circuit: circuit!,
+        name: "RESISTOR",
+        rotation,
+        x,
+        y,
+        data: { resistance, TC1: 0, TC2: 0, Tnom: 5 },
+        multipliers: {
+          resistance: resistanceMultiplier,
+          TC1: 0,
+          TC2: 0,
+          Tnom: 0,
+        },
+        _modelUnits: [multiplierIndex(resistanceMultiplier), 0, 0, 0],
+      });
+      return el("Resistor", {
+        position: { x, y },
+        rotation,
+        resistance,
+        multiplier: resistanceMultiplier,
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_add_battery",
+    {
+      description: "Add a battery (DC voltage source) to the circuit",
+      inputSchema: batterySchema,
+    },
+    async ({ rotation, x, y, voltage }) => {
+      c();
+      addBaseElement<Battery>({
+        circuit: circuit!,
+        name: "BATTERY",
+        rotation,
+        x,
+        y,
+        data: { voltage },
+      });
+      return el("Battery", { position: { x, y }, rotation, voltage });
+    },
+  );
+  server.registerTool(
+    "ewb_add_capacitor",
+    {
+      description: "Add a capacitor to the circuit",
+      inputSchema: capacitorSchema,
+    },
+    async ({ rotation, x, y, capacitance, multiplier }) => {
+      c();
+      addBaseElement<Capacitor>({
+        circuit: circuit!,
+        name: "CAPACITOR",
+        rotation,
+        x,
+        y,
+        data: { capacitance },
+        _modelUnits: [multiplierIndex(multiplier)],
+      });
+      return el("Capacitor", {
+        position: { x, y },
+        rotation,
+        capacitance,
+        multiplier,
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_add_inductor",
+    {
+      description: "Add an inductor to the circuit",
+      inputSchema: inductorSchema,
+    },
+    async ({ rotation, x, y, inductance, multiplier }) => {
+      c();
+      addBaseElement<Inductor>({
+        circuit: circuit!,
+        name: "INDUCTOR",
+        rotation,
+        x,
+        y,
+        data: { inductance },
+        _modelUnits: [multiplierIndex(multiplier)],
+      });
+      return el("Inductor", {
+        position: { x, y },
+        rotation,
+        inductance,
+        multiplier,
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_add_ac_voltage_source",
+    {
+      description: "Add an AC voltage source to the circuit",
+      inputSchema: acVoltageSourceSchema,
+    },
+    async ({ rotation, x, y, peakVoltage, frequency, phase }) => {
+      c();
+      addBaseElement<AcVoltageSource>({
+        circuit: circuit!,
+        name: "AC_VOLTAGE_SOURCE",
+        rotation,
+        x,
+        y,
+        data: { peakVoltage, frequency, phase },
+      });
+      return el("AC Voltage Source", {
+        position: { x, y },
+        rotation,
+        peakVoltage,
+        frequency,
+        phase,
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_add_dc_current_source",
+    {
+      description: "Add a DC current source to the circuit",
+      inputSchema: dcCurrentSourceSchema,
+    },
+    async ({ rotation, x, y, current }) => {
+      c();
+      addBaseElement<DcCurrentSource>({
+        circuit: circuit!,
+        name: "DC_CURRENT_SOURCE",
+        rotation,
+        x,
+        y,
+        data: { current },
+      });
+      return el("DC Current Source", { position: { x, y }, rotation, current });
+    },
+  );
+  server.registerTool(
+    "ewb_add_ac_current_source",
+    {
+      description: "Add an AC current source to the circuit",
+      inputSchema: acCurrentSourceSchema,
+    },
+    async ({ rotation, x, y, peakCurrent, frequency, phase }) => {
+      c();
+      addBaseElement<AcCurrentSource>({
+        circuit: circuit!,
+        name: "AC_CURRENT_SOURCE",
+        rotation,
+        x,
+        y,
+        data: { peakCurrent, frequency, phase },
+      });
+      return el("AC Current Source", {
+        position: { x, y },
+        rotation,
+        peakCurrent,
+        frequency,
+        phase,
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_add_fuse",
+    {
+      description: "Add a fuse to the circuit",
+      inputSchema: fuseSchema,
+    },
+    async ({ rotation, x, y, rating, responseTime }) => {
+      c();
+      addBaseElement<Fuse>({
+        circuit: circuit!,
+        name: "FUSE",
+        rotation,
+        x,
+        y,
+        data: { rating, responseTime },
+      });
+      return el("Fuse", { position: { x, y }, rotation, rating, responseTime });
+    },
+  );
+  server.registerTool(
+    "ewb_add_relay",
+    {
+      description: "Add a relay to the circuit",
+      inputSchema: relaySchema,
+    },
+    async ({
+      rotation,
+      x,
+      y,
+      pickupVoltage,
+      dropoutVoltage,
+      pickupTime,
+      dropoutTime,
+    }) => {
+      const circuit = c();
+      addBaseElement<Relay>({
+        circuit,
+        name: "RELAY",
+        rotation,
+        x,
+        y,
+        data: { pickupVoltage, dropoutVoltage, pickupTime, dropoutTime },
+      });
+      return el("Relay", {
+        position: { x, y },
+        rotation,
+        pickupVoltage,
+        dropoutVoltage,
+        pickupTime,
+        dropoutTime,
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_add_switch",
+    {
+      description: "Add a (normally open) switch to the circuit",
+      inputSchema: switchSchema,
+    },
+    async ({ rotation, x, y, initialState }) => {
+      const circuit = c();
+      addBaseElement<Switch>({
+        circuit,
+        name: "SWITCH",
+        rotation,
+        x,
+        y,
+        data: { initialState },
+      });
+      return el("Switch", { position: { x, y }, rotation, initialState });
+    },
+  );
+  server.registerTool(
+    "ewb_add_time_delay_switch",
+    {
+      description: "Add a time-delay switch to the circuit",
+      inputSchema: timeDelaySwitchSchema,
+    },
+    async ({ rotation, x, y, tOn, tOff, delayOn, delayOff }) => {
+      const circuit = c();
+      addBaseElement<TimeDelaySwitch>({
+        circuit,
+        name: "TIME_DELAY_SWITCH",
+        rotation,
+        x,
+        y,
+        data: { tOn, tOff, delayOn, delayOff },
+      });
+      return el("Time-Delay Switch", {
+        position: { x, y },
+        rotation,
+        tOn,
+        tOff,
+        delayOn,
+        delayOff,
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_add_voltage_controlled_switch",
+    {
+      description: "Add a voltage-controlled switch to the circuit",
+      inputSchema: voltageControlledSwitchSchema,
+    },
+    async ({ rotation, x, y, rOn, rOff, threshold }) => {
+      const circuit = c();
+      addBaseElement<VoltageControlledSwitch>({
+        circuit,
+        name: "VOLTAGE_CONTROLLED_SWITCH",
+        rotation,
+        x,
+        y,
+        data: { rOn, rOff, threshold },
+      });
+      return el("Voltage-Controlled Switch", {
+        position: { x, y },
+        rotation,
+        rOn,
+        rOff,
+        threshold,
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_add_current_controlled_switch",
+    {
+      description: "Add a current-controlled switch to the circuit",
+      inputSchema: currentControlledSwitchSchema,
+    },
+    async ({ rotation, x, y, rOn, rOff, threshold }) => {
+      const circuit = c();
+      addBaseElement<CurrentControlledSwitch>({
+        circuit,
+        name: "CURRENT_CONTROLLED_SWITCH",
+        rotation,
+        x,
+        y,
+        data: { rOn, rOff, threshold },
+      });
+      return el("Current-Controlled Switch", {
+        position: { x, y },
+        rotation,
+        rOn,
+        rOff,
+        threshold,
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_add_ammeter",
+    {
+      description: "Add an ammeter to the circuit (mode: 0=DC, 1=AC)",
+      inputSchema: ammeterSchema,
+    },
+    async ({ rotation, x, y, mode }) => {
+      const circuit = c();
+      addBaseElement<Ammeter>({
+        circuit,
+        name: "AMMETER",
+        rotation,
+        x,
+        y,
+        data: { mode },
+      });
+      return el("Ammeter", { position: { x, y }, rotation, mode });
+    },
+  );
+  server.registerTool(
+    "ewb_add_voltmeter",
+    {
+      description: "Add a voltmeter to the circuit (mode: 0=DC, 1=AC)",
+      inputSchema: voltmeterSchema,
+    },
+    async ({ rotation, x, y, mode }) => {
+      const circuit = c();
+      addBaseElement<Voltmeter>({
+        circuit,
+        name: "VOLTMETER",
+        rotation,
+        x,
+        y,
+        data: { mode },
+      });
+      return el("Voltmeter", { position: { x, y }, rotation, mode });
+    },
+  );
+  server.registerTool(
+    "ewb_save_file",
+    {
+      description: "Save the current EWB circuit file",
+      inputSchema: z.void(),
+      outputSchema: z.object({ file: z.string() }),
+    },
+    async () => {
+      const circuit = c();
+      return {
+        content: [{ type: "text" as const, text: serialize(circuit) }],
+      };
+    },
+  );
+  server.registerTool(
+    "ewb_get_element_by_idx",
+    {
+      inputSchema: z.object({
+        idx: z.number(),
+        getHiddenFields: z.boolean().optional().default(false),
+      }),
+    },
+    async ({ idx, getHiddenFields }) => {
+      const circuit = c();
+      const elem = circuit.elements[idx];
+      if (!elem)
+        return {
+          content: [{ type: "text", text: "Element not found" }],
+          isError: true,
+        };
+      return el(
+        elem.name,
+        Object.fromEntries(
+          Object.entries(elem.data).filter(
+            ([k]) => getHiddenFields || !k.startsWith("_"),
+          ),
+        ),
+      );
+    },
+  );
+  // wires
+  server.registerTool(
+    "ewb_add_wire",
+    {
+      inputSchema: wireSchema,
+    },
+    (input) => {
+      const circuit = c();
+      addWire({ circuit, ...input });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              ...input,
+              wireId: circuit.wires.length - 1, // since we just pushed
+            }),
+          },
+        ],
+      };
+    },
+  );
+});
