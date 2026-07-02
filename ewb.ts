@@ -504,9 +504,9 @@ export function encodeFile(data: Uint8Array) {
     "Charset: ANSI",
     "Description: ",
     '"" ',
-    "",
     "EncryptionType: 2",
     "UsingVectorGraphics: 0",
+    "",
     body,
   ].join("\r\n");
 }

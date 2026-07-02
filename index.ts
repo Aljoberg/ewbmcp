@@ -27,7 +27,10 @@ import {
   type VoltageControlledSwitch,
   type Voltmeter,
 } from "./types";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  ResourceTemplate,
+  type McpServer,
+} from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   acCurrentSourceSchema,
@@ -671,7 +674,7 @@ export function serialize({ elements, wires }: DeserializedCircuit) {
       SerialNo R "\\"RBS-1999-RBS\\""
         "" 
       Version R "Version 5.12" 
-      Ewb_Restrictions 
+      Restrictions 
       { 
         Name R "Global Restrictions" 
         CircPass R "" 
@@ -1008,10 +1011,11 @@ function addWire({
 function multiplierIndex(mult: number): number {
   return mult >= 1000000000 ? 3 : mult >= 1000000 ? 2 : mult >= 1000 ? 1 : 0;
 }
+let circuit: DeserializedCircuit | null = null;
 
 export const handler = createMcpHandler(
   (server) => {
-    let circuit: DeserializedCircuit | null = null;
+    console.log("mreowwww :3");
     function c() {
       if (!circuit) throw new Error("No circuit loaded");
       return circuit;
@@ -1144,9 +1148,14 @@ export const handler = createMcpHandler(
       }
 
       server.registerTool(
-        `ewb_add_${shortName}`,
-        { ...config, outputSchema: addOutputSchema },
-        (input: unknown) => cbs.add(input as z.infer<T>, { add }),
+        `add_${shortName}`,
+        {
+          description: config.description,
+          inputSchema: schema,
+          outputSchema: addOutputSchema,
+        },
+        // @ts-expect-error: T can not be resolved properly
+        (input: z.infer<T>) => cbs.add(input, { add }),
       );
 
       const partialSchema = schema.partial();
@@ -1164,7 +1173,7 @@ export const handler = createMcpHandler(
         ) => r(input.where));
 
       server.registerTool(
-        `ewb_update_${shortName}`,
+        `update_${shortName}`,
         {
           description: config.description,
           inputSchema: z.object({ where: partialSchema, data: partialSchema }),
@@ -1177,7 +1186,7 @@ export const handler = createMcpHandler(
           ),
       );
       server.registerTool(
-        `ewb_delete_${shortName}`,
+        `delete_${shortName}`,
         {
           description: config.description,
           inputSchema: z.object({ where: partialSchema }),
@@ -1187,9 +1196,16 @@ export const handler = createMcpHandler(
           removeFn(input as { where: Partial<z.infer<T>> }, { remove }),
       );
     }
-
     server.registerTool(
-      "ewb_load_file",
+      "new_file",
+      { description: "Create a new EWB file", outputSchema: z.object({}) },
+      () => {
+        circuit = { elements: [], wires: [] };
+        return ok({});
+      },
+    );
+    server.registerTool(
+      "load_file",
       {
         description: "Load an EWB circuit file",
         outputSchema: loadFileSchema,
@@ -1507,25 +1523,51 @@ export const handler = createMcpHandler(
           }),
       },
     );
+    // const template = new ResourceTemplate("file:///ewb/{fileName}", {
+    //   list: undefined /* TODO */,
+    // });
+    // server.registerResource(
+    //   "files",
+    //   template,
+    //   {
+    //     description: "EWB file resource",
+    //   },
+    //   (uri, variables) => {
+    //     return {
+    //       contents: [
+    //         {
+    //           uri: `file:///ewb/${variables.fileName}`,
+    //           text: "Not supported yet :P",
+    //         },
+    //       ],
+    //     };
+    //   },
+    // );
     server.registerTool(
-      "ewb_save_file",
+      "export_file",
       {
-        description: "Save the current EWB circuit file",
-        inputSchema: z.object({}),
-        outputSchema: z.object({ file: z.string() }),
+        description: "Export the current EWB circuit file to a string",
+        inputSchema: z.object({ fileName: z.string() }),
+        // outputSchema: z.object({ file: z.string() }),
       },
-      async () => {
+      async ({ fileName }) => {
         const circuit = c();
         const propBag = serialize(circuit);
+        await Bun.file(fileName).write(propBag);
         const data = new TextEncoder().encode(propBag);
         const ewbText = encodeFile(data);
-        return ok({
-          file: ewbText,
-        });
+        return {
+          content: [
+            {
+              type: "resource" as const,
+              resource: { uri: `file:///ewb/${fileName}`, text: ewbText },
+            },
+          ],
+        };
       },
     );
     server.registerTool(
-      "ewb_get_element_by_index",
+      "get_element_by_index",
       {
         description: "Get an element by its index in the circuit",
         inputSchema: z.object({
@@ -1559,7 +1601,7 @@ export const handler = createMcpHandler(
     );
     // find elements
     server.registerTool(
-      "ewb_find_elements",
+      "find_elements",
       {
         description:
           "Find elements in the circuit matching optional name and criteria",
@@ -1603,7 +1645,7 @@ export const handler = createMcpHandler(
     );
     // wires
     server.registerTool(
-      "ewb_add_wire",
+      "add_wire",
       {
         description: "Add a wire to the circuit",
         inputSchema: wireSchema,
@@ -1621,7 +1663,7 @@ export const handler = createMcpHandler(
       },
     );
     server.registerTool(
-      "ewb_update_wire",
+      "update_wire",
       {
         description: "Update wires in the circuit",
         inputSchema: z.object({
@@ -1652,7 +1694,7 @@ export const handler = createMcpHandler(
       },
     );
     server.registerTool(
-      "ewb_delete_wire",
+      "delete_wire",
       {
         description: "Delete wires from the circuit",
         inputSchema: z.object({ where: wireSchema.partial() }),
