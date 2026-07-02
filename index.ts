@@ -31,7 +31,24 @@ import {
   ResourceTemplate,
   type McpServer,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
+
+const _origSseSend = SSEServerTransport.prototype.send;
+SSEServerTransport.prototype.send = function (message: any) {
+  console.log(">>> SSE send:", JSON.stringify(message));
+  return _origSseSend.call(this, message);
+};
+
+const _origWebSend = WebStandardStreamableHTTPServerTransport.prototype.send;
+WebStandardStreamableHTTPServerTransport.prototype.send = function (
+  message: any,
+  options?: any,
+) {
+  console.log(">>> StreamableHTTP send:", JSON.stringify(message));
+  return _origWebSend.call(this, message, options);
+};
 import {
   acCurrentSourceSchema,
   acVoltageSourceSchema,
@@ -1016,6 +1033,41 @@ let circuit: DeserializedCircuit | null = null;
 export const handler = createMcpHandler(
   (server) => {
     console.log("mreowwww :3");
+    // server.registerResource(
+    //   "mcp-docs",
+    //   "ewb://docs/mcp",
+    //   {
+    //     title: "MCP Documentation",
+    //     mimeType: "text/markdown",
+    //     description: "MCP server documentation for EWB circuit editor",
+    //     annotations: { audience: ["assistant"], priority: 1 },
+    //   },
+    //   async () => ({
+    //     contents: [
+    //       {
+    //         uri: "ewb://docs/mcp",
+    //         text: await Bun.file("./MCP_DOCUMENTATION.md").text(),
+    //         mimeType: "text/markdown",
+    //       },
+    //     ],
+    //   }),
+    // );
+    // server.registerTool("list_resources", { description: "List all available resources" }, async () => {
+    //   return ok([1, 2, 3])
+    // });
+    server.registerTool(
+      "get_docs",
+      {
+        description: "Get documentation",
+        outputSchema: z.object({ text: z.string(), mimeType: z.string() }),
+      },
+      async () => {
+        return ok({
+          text: await Bun.file("./MCP_DOCUMENTATION.md").text(),
+          mimeType: "text/markdown",
+        });
+      },
+    );
     function c() {
       if (!circuit) throw new Error("No circuit loaded");
       return circuit;
@@ -1153,6 +1205,11 @@ export const handler = createMcpHandler(
           description: config.description,
           inputSchema: schema,
           outputSchema: addOutputSchema,
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: false,
+            openWorldHint: false,
+          },
         },
         // @ts-expect-error: T can not be resolved properly
         (input: z.infer<T>) => cbs.add(input, { add }),
@@ -1178,6 +1235,11 @@ export const handler = createMcpHandler(
           description: config.description,
           inputSchema: z.object({ where: partialSchema, data: partialSchema }),
           outputSchema: updateOutputSchema,
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: false,
+            openWorldHint: false,
+          },
         },
         async (input) =>
           updateFn(
@@ -1191,6 +1253,11 @@ export const handler = createMcpHandler(
           description: config.description,
           inputSchema: z.object({ where: partialSchema }),
           outputSchema: removeOutputSchema,
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: true,
+            openWorldHint: false,
+          },
         },
         (input) =>
           removeFn(input as { where: Partial<z.infer<T>> }, { remove }),
@@ -1198,7 +1265,15 @@ export const handler = createMcpHandler(
     }
     server.registerTool(
       "new_file",
-      { description: "Create a new EWB file", outputSchema: z.object({}) },
+      {
+        description: "Create a new EWB file",
+        outputSchema: z.object({}),
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
+      },
       () => {
         circuit = { elements: [], wires: [] };
         return ok({});
@@ -1210,6 +1285,11 @@ export const handler = createMcpHandler(
         description: "Load an EWB circuit file",
         outputSchema: loadFileSchema,
         inputSchema: z.object({ fileContents: z.string() }),
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
       },
       ({ fileContents }) => {
         console.log("woah got it!", fileContents);
@@ -1548,6 +1628,11 @@ export const handler = createMcpHandler(
       {
         description: "Export the current EWB circuit file to a string",
         inputSchema: z.object({ fileName: z.string() }),
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
         // outputSchema: z.object({ file: z.string() }),
       },
       async ({ fileName }) => {
@@ -1560,7 +1645,7 @@ export const handler = createMcpHandler(
           content: [
             {
               type: "resource" as const,
-              resource: { uri: `file:///ewb/${fileName}`, text: ewbText },
+              resource: { uri: `ewb://files/${fileName}`, text: ewbText },
             },
           ],
         };
@@ -1575,6 +1660,11 @@ export const handler = createMcpHandler(
           getHiddenFields: z.boolean().optional().default(false),
         }),
         outputSchema: elementDataOutputSchema,
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
       },
       async ({ index, getHiddenFields }) => {
         const circuit = c();
@@ -1611,6 +1701,11 @@ export const handler = createMcpHandler(
           getHiddenFields: z.boolean().optional().default(false),
         }),
         outputSchema: findOutputSchema,
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
       },
       async ({ elementName, where, getHiddenFields }) => {
         const circuit = c();
@@ -1650,6 +1745,11 @@ export const handler = createMcpHandler(
         description: "Add a wire to the circuit",
         inputSchema: wireSchema,
         outputSchema: addOutputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
       },
       (input) => {
         const circuit = c();
@@ -1671,6 +1771,11 @@ export const handler = createMcpHandler(
           data: wireSchema.partial(),
         }),
         outputSchema: updateOutputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
       },
       async ({ where, data }) => {
         const circuit = c();
@@ -1694,11 +1799,51 @@ export const handler = createMcpHandler(
       },
     );
     server.registerTool(
+      "find_wires",
+      {
+        description: "Find wires in the circuit matching optional criteria",
+        inputSchema: z.object({
+          where: z.record(z.string(), z.unknown()).optional(),
+        }),
+        outputSchema: findOutputSchema,
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
+      },
+      async ({ where }) => {
+        const circuit = c();
+        const matches: { index: number; wire: ChangedWire }[] = [];
+        for (const [i, wire] of circuit.wires.entries()) {
+          if (
+            where &&
+            !Object.entries(where).every(
+              ([k, v]) => wire[k as keyof ChangedWire] === v,
+            )
+          )
+            continue;
+          matches.push({ index: i, wire });
+        }
+        return ok({
+          action: "find",
+          element: "WIRE",
+          total: matches.length,
+          matches: matches.map(({ index, wire }) => ({ index, data: wire })),
+        });
+      },
+    );
+    server.registerTool(
       "delete_wire",
       {
         description: "Delete wires from the circuit",
         inputSchema: z.object({ where: wireSchema.partial() }),
         outputSchema: removeOutputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          openWorldHint: false,
+        },
       },
       async ({ where }) => {
         const circuit = c();
@@ -1723,6 +1868,17 @@ export const handler = createMcpHandler(
       },
     );
   },
-  {},
-  { basePath: "/api", verboseLogs: true, redisUrl: "redis://localhost:6379" },
+  {
+    instructions:
+      "At the start of the conversation, if asked to do anything regarding Electronics Workbench, call 'get_docs' and read the documentation. This is your source of truth and you should rely on it for accurate information.",
+    capabilities: {
+      tools: {},
+      resources: {},
+    },
+  },
+  {
+    basePath: "/api",
+    verboseLogs: true,
+    redisUrl: "redis://localhost:6379",
+  },
 );
