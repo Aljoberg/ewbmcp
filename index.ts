@@ -46,7 +46,7 @@ import {
   timeDelaySwitchSchema,
   voltageControlledSwitchSchema,
   voltmeterSchema,
-  type wireSchema,
+  wireSchema,
 } from "./schemas";
 
 const DELIMITERS = [0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20];
@@ -919,7 +919,7 @@ export function addBaseElement<T extends Element>({
   modelName?: string;
   [additional: string]: unknown;
 }) {
-  circuit.elements.push({
+  const elem = {
     name,
     rotation,
     x,
@@ -933,7 +933,9 @@ export function addBaseElement<T extends Element>({
     _status: 0,
     connectedWires: [],
     ...additionalProps,
-  } as Element);
+  } as Element;
+  circuit.elements.push(elem);
+  return elem;
 }
 
 function addExtensionElement({
@@ -1020,6 +1022,38 @@ const handler = createMcpHandler((server) => {
       ],
     };
   }
+
+  const CUD: typeof server.registerTool = (name, config, cb) => {
+    // add
+    function addElement(
+      props: typeof addBaseElement extends (args: infer U) => void ? U : never,
+    ) {
+      const circuit = c();
+      const elem = addBaseElement({ ...props, circuit }); // TODO remove circuit from addelement
+      return Object.fromEntries(
+        Object.entries(elem).filter(([k]) => !k.startsWith("_")),
+      );
+    }
+    function updateElement(
+      where: typeof addBaseElement extends (args: infer U) => void
+        ? Partial<U>
+        : never,
+      data: typeof addBaseElement extends (args: infer U) => void
+        ? Partial<U>
+        : never,
+    ) {
+      // add where logic
+      // add data logic
+    }
+    // add delete
+    server.registerTool(`ewb_add_${name}`, config, (...args) =>
+      cb(...args, addElement),
+    );
+    server.registerTool(`ewb_update_${name}`, {...config, inputSchema: z.object({ where: config?.inputSchema?.partial(), data: config.inputSchema })}, (...args) =>
+      cb(...args, updateElement),
+    );
+  };
+
   server.registerTool(
     "ewb_load_file",
     { description: "Load an EWB circuit file", inputSchema: z.string() },
@@ -1426,25 +1460,19 @@ const handler = createMcpHandler((server) => {
     },
   );
   // wires
-  server.registerTool(
-    "ewb_add_wire",
-    {
-      inputSchema: wireSchema,
-    },
-    (input) => {
-      const circuit = c();
-      addWire({ circuit, ...input });
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              ...input,
-              wireId: circuit.wires.length - 1, // since we just pushed
-            }),
-          },
-        ],
-      };
-    },
-  );
+  server.registerTool("ewb_add_wire", { inputSchema: wireSchema }, (input) => {
+    const circuit = c();
+    addWire({ circuit, ...input });
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            ...input,
+            wireId: circuit.wires.length - 1, // since we just pushed
+          }),
+        },
+      ],
+    };
+  });
 });
