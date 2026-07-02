@@ -1,7 +1,10 @@
 import { addBaseElement, deserialize, serialize } from ".";
+import { decodeFile, encodeFile } from "./ewb";
 import type { Resistor } from "./types";
 
-const circuit = deserialize(await Bun.file(process.argv[2]!).bytes());
+const circuit = deserialize(
+  decodeFile(await Bun.file(process.argv[2]!).text()),
+);
 
 // adds 500 ohm resistor (upor)
 addBaseElement<Resistor>({
@@ -18,6 +21,6 @@ addBaseElement<Resistor>({
   },
 });
 
-const out = serialize(circuit);
+const out = encodeFile(new TextEncoder().encode(serialize(circuit)));
 console.log(out);
-await Bun.file("output.out").write(out);
+await Bun.file("output.ewb").write(out);

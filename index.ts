@@ -1185,7 +1185,7 @@ const handler = createMcpHandler((server) => {
       outputSchema: loadFileSchema,
     },
     async (fileContents) => {
-      const { decoded } = decodeFile(fileContents);
+      const decoded = decodeFile(fileContents);
       circuit = deserialize(decoded);
       return {
         content: [
@@ -1499,7 +1499,7 @@ const handler = createMcpHandler((server) => {
       const circuit = c();
       const propBag = serialize(circuit);
       const data = new TextEncoder().encode(propBag);
-      const ewbText = encodeFile(data, 2);
+      const ewbText = encodeFile(data);
       return {
         content: [{ type: "text" as const, text: ewbText }],
       };

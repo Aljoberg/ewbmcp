@@ -1,5 +1,4 @@
 import { crc32 } from "node:zlib";
-import type { EwbMeta } from "./types";
 
 const LEN_EXTRA_BITS = [3, 2, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 7, 7];
 const LEN_SORTED = [5, 3, 1, 6, 10, 2, 12, 20, 4, 24, 8, 48, 16, 32, 64, 0];
@@ -123,12 +122,7 @@ function readSymbol(br: BitReader) {
   return idx + 0x100;
 }
 
-function decodeDistance(
-  br: BitReader,
-  matchLen: number,
-  distBits: number,
-  _distMask: number,
-) {
+function decodeDistance(br: BitReader, matchLen: number, distBits: number) {
   const peek8 = br.peek(8);
   if (peek8 === null) return 0;
   const dsym = DISTANCE_TBL[peek8]!;
@@ -163,7 +157,7 @@ function pkwareDecompress(data: Uint8Array) {
       ringPos++;
     } else {
       const matchLen = sym - 0xfe;
-      const dist = decodeDistance(br, matchLen, distBits, 0);
+      const dist = decodeDistance(br, matchLen, distBits);
       if (dist === 0) break;
       for (let i = 0; i < matchLen; i++) {
         const src = (ringPos - dist) & 0x1fff;
@@ -318,21 +312,19 @@ function pkwareCompress(data: Uint8Array) {
   const bw = new BitWriter();
   const n = data.length;
   const hc = new HashChain(data);
-  function valid(ml: number, _md: number): boolean {
-    return ml >= 2;
-  }
+  const valid = (ml: number) => ml >= 2;
   let i = 0;
   while (i < n) {
     let [matchLen, matchD0] = hc.findMatch(i);
-    while (valid(matchLen, matchD0) && !(matchLen === 2 && matchD0 >= 0x100)) {
+    while (valid(matchLen) && !(matchLen === 2 && matchD0 >= 0x100)) {
       if (i + matchLen > n) {
         matchLen = n - i - 1;
-        if (!valid(matchLen, matchD0)) break;
+        if (!valid(matchLen)) break;
       }
       if (matchLen > 7 || i + 1 >= n) break;
       const savedD0 = matchD0;
       const [nextLen, nextD0] = hc.findMatch(i + 1);
-      if (!valid(nextLen, nextD0)) break;
+      if (!valid(nextLen)) break;
       if (
         !(
           nextLen > matchLen + 1 ||
@@ -348,7 +340,7 @@ function pkwareCompress(data: Uint8Array) {
     }
     if (
       matchLen &&
-      valid(matchLen, matchD0) &&
+      valid(matchLen) &&
       matchD0 + 1 <= 0x400 &&
       !(matchLen === 2 && matchD0 >= 0x100)
     ) {
@@ -399,35 +391,6 @@ function pkwareCompress(data: Uint8Array) {
   return out;
 }
 
-function decodeType1(text: string) {
-  const result: number[] = [];
-  let i = 0;
-  while (i < text.length - 1) {
-    const c1 = text[i]!;
-    const c2 = text[i + 1]!;
-    if (c1 < "A" || c1 > "P") {
-      i++;
-      continue;
-    }
-    if (c2 < "A" || c2 > "P") {
-      i += 2;
-      continue;
-    }
-    result.push(((c1.charCodeAt(0) - 0x41) << 4) | (c2.charCodeAt(0) - 0x41));
-    i += 2;
-  }
-  return new Uint8Array(result);
-}
-
-function encodeType1(data: Uint8Array) {
-  let out = "";
-  for (let i = 0; i < data.length; i++) {
-    out += String.fromCharCode((data[i]! >> 4) + 0x41);
-    out += String.fromCharCode((data[i]! & 0xf) + 0x41);
-  }
-  return out;
-}
-
 function decodeType2Chars(text: string) {
   const result: number[] = [];
   let i = 0;
@@ -456,7 +419,7 @@ function encodeType2Chars(data: Uint8Array) {
   return out;
 }
 
-export function decodeType2(text: string, decompress = true) {
+function decodeBody(text: string) {
   const parts = text.split("$");
   const result: number[] = [];
   for (const part of parts) {
@@ -465,48 +428,29 @@ export function decodeType2(text: string, decompress = true) {
     if (exclIdx !== -1) p = p.substring(0, exclIdx);
     if (!p) continue;
     const block = decodeType2Chars(p);
-    if (decompress) {
-      const d = pkwareDecompress(block);
-      if (d) result.push(...d);
-    } else {
-      result.push(...block);
-    }
+    const d = pkwareDecompress(block);
+    if (d) result.push(...d);
   }
   return new Uint8Array(result);
 }
 
-export function encodeType2(data: Uint8Array, compress = false) {
-  if (compress) {
-    const parts: string[] = [];
-    for (let offset = 0; offset < data.length; offset += 0x400) {
-      const chunk = data.subarray(offset, offset + 0x400);
-      const compressed = pkwareCompress(chunk);
-      parts.push(encodeType2Chars(compressed));
-    }
-    return parts.join("$");
-  } else {
-    return encodeType2Chars(data);
+function encodeBody(data: Uint8Array) {
+  const parts: string[] = [];
+  for (let offset = 0; offset < data.length; offset += 0x400) {
+    const chunk = data.subarray(offset, offset + 0x400);
+    const compressed = pkwareCompress(chunk);
+    parts.push(encodeType2Chars(compressed));
   }
+  return parts.join("$");
 }
 
-
-export function parseEwbHeader(text: string) {
-  const meta: Partial<EwbMeta> = {};
+function parseHeader(text: string) {
   let body = "";
   let inData = false;
   for (const rawLine of text.split("\n")) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (line.startsWith("Version:")) {
-      meta.version = line.split(":", 2)[1]!.trim();
-    } else if (line.startsWith("Charset:")) {
-      meta.charset = line.split(":", 2)[1]!.trim();
-    } else if (line.startsWith("Description:")) {
-      meta.description = line.split(":", 2)[1]!.trim();
-    } else if (line.startsWith("EncryptionType:")) {
-      meta.encType = parseInt(line.split(":")[1]!.trim(), 10);
-    } else if (line.startsWith("UsingVectorGraphics:")) {
-      meta.vecGraphics = line.split(":", 2)[1]!.trim();
+    if (line.startsWith("UsingVectorGraphics:")) {
       inData = true;
       continue;
     }
@@ -516,42 +460,10 @@ export function parseEwbHeader(text: string) {
       body += l;
     }
   }
-  return { meta, body };
+  return body;
 }
 
-export function verifyEwbCrc(
-  body: string,
-  decompressedBlocks: Uint8Array[],
-) {
-  const crcIdx = body.indexOf("!");
-  if (crcIdx === -1) return false;
-  const stored = body.substring(crcIdx + 1, crcIdx + 9);
-  if (stored.length !== 8) return false;
-  let xorCrc = 0;
-  for (const blockData of decompressedBlocks) {
-    xorCrc ^= crc32(Buffer.from(blockData)) >>> 0;
-  }
-  return xorCrc === parseInt(stored, 16);
-}
-
-export function decodeFile(
-  text: string,
-  decompress = true,
-) {
-  const { meta, body } = parseEwbHeader(text);
-  const et = meta.encType;
-  let decoded: Uint8Array;
-  if (et === 1) {
-    decoded = decodeType1(body);
-  } else if (et === 2) {
-    decoded = decodeType2(body, decompress);
-  } else {
-    throw new Error(`Unknown EncryptionType: ${et}`);
-  }
-  return { meta, decoded };
-}
-
-export function computeEwbCrc(data: Uint8Array, chunkSize = 0x400) {
+function computeXorCrc(data: Uint8Array, chunkSize = 0x400) {
   let crc = 0;
   for (let offset = 0; offset < data.length; offset += chunkSize) {
     const chunk = data.subarray(offset, offset + chunkSize);
@@ -560,48 +472,41 @@ export function computeEwbCrc(data: Uint8Array, chunkSize = 0x400) {
   return crc;
 }
 
-export function encodeFile(
-  data: Uint8Array,
-  encType: number,
-  description = "",
-  version = "5",
-  compress = false,
-) {
-  const header =
-    "Electronics Workbench Circuit File\r\n" +
-    `Version: ${version}\r\n` +
-    "Charset: ANSI\r\n" +
-    "Description: \r\n" +
-    `"${description}" \r\n` +
-    "\r\n" +
-    `EncryptionType: ${encType}\r\n` +
-    "UsingVectorGraphics: 0\r\n";
+function chunks65(s: string) {
+  const ch: string[] = [];
+  for (let i = 0; i < s.length; i += 65) ch.push(s.substring(i, i + 65));
+  return ch;
+}
 
-  let encoded: string;
-  let crc: number;
-  if (encType === 1) {
-    encoded = encodeType1(data);
-    crc = crc32(Buffer.from(data)) >>> 0;
-  } else {
-    encoded = encodeType2(data, compress);
-    crc = compress ? computeEwbCrc(data) : crc32(Buffer.from(data)) >>> 0;
-  }
+export function decodeFile(text: string) {
+  const body = parseHeader(text);
+  const crcIdx = body.indexOf("!");
+  const data =
+    crcIdx !== -1 ? decodeBody(body.substring(0, crcIdx)) : decodeBody(body);
+  return data;
+}
+
+export function encodeFile(data: Uint8Array) {
+  const encoded = encodeBody(data);
+  const crc = computeXorCrc(data);
+  const ch = chunks65(encoded);
 
   let body = "";
-  const chunks: string[] = [];
-  for (let i = 0; i < encoded.length; i += 65) {
-    chunks.push(encoded.substring(i, i + 65));
+  for (let idx = 0; idx < ch.length; idx++) {
+    body +=
+      (idx === 0 ? "/" : "") + ch[idx]! + (idx < ch.length - 1 ? "\n" : "");
   }
-  for (let idx = 0; idx < chunks.length; idx++) {
-    if (idx === 0) {
-      body += "/" + chunks[idx]! + "\n";
-    } else if (idx < chunks.length - 1) {
-      body += chunks[idx]! + "\n";
-    } else {
-      body += chunks[idx]!;
-    }
-  }
-
   body += `$!${crc.toString(16).padStart(8, "0")}`;
-  return header + body;
+
+  return [
+    "Electronics Workbench Circuit File",
+    "Version: 5",
+    "Charset: ANSI",
+    "Description: ",
+    '"" ',
+    "",
+    "EncryptionType: 2",
+    "UsingVectorGraphics: 0",
+    body,
+  ].join("\r\n");
 }

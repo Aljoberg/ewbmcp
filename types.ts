@@ -530,11 +530,3 @@ export interface DeserializedCircuit {
   wires: ChangedWire[];
   // more tba
 }
-
-export interface EwbMeta {
-  version: string;
-  charset: string;
-  description: string;
-  encType: number;
-  vecGraphics: string;
-}
