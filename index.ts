@@ -1081,7 +1081,8 @@ const handler = createMcpHandler((server) => {
         if (
           elem.name === elementName &&
           Object.entries(where).every(
-            ([k, v]) => (elem as Record<string, unknown>)[k] === v,
+            ([k, v]) =>
+              (elem as Record<string, unknown>)[k] === v || elem.data[k] === v,
           )
         ) {
           Object.assign(elem, data);
@@ -1101,7 +1102,7 @@ const handler = createMcpHandler((server) => {
       });
     }
 
-    function remove(where: Record<string, unknown>) {
+    function remove(where: Partial<z.infer<T>>) {
       const circuit = c();
       const indices: number[] = [];
       for (let i = circuit.elements.length - 1; i >= 0; i--) {
@@ -1497,19 +1498,77 @@ const handler = createMcpHandler((server) => {
     },
   );
   // wires
-  server.registerTool("ewb_add_wire", { inputSchema: wireSchema }, (input) => {
-    const circuit = c();
-    addWire({ circuit, ...input });
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            ...input,
-            wireId: circuit.wires.length - 1, // since we just pushed
-          }),
-        },
-      ],
-    };
-  });
+  server.registerTool(
+    "ewb_add_wire",
+    { description: "Add a wire to the circuit", inputSchema: wireSchema },
+    (input) => {
+      const circuit = c();
+      addWire({ circuit, ...input });
+      return ok({
+        action: "add",
+        element: "WIRE",
+        index: circuit.wires.length - 1,
+        ...input,
+        wireId: circuit.wires.length - 1,
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_update_wire",
+    {
+      description: "Update wires in the circuit",
+      inputSchema: z.object({
+        where: wireSchema.partial(),
+        data: wireSchema.partial(),
+      }),
+    },
+    ({ where, data }) => {
+      const circuit = c();
+      const matched: { index: number; wire: ChangedWire }[] = [];
+      for (const [i, wire] of circuit.wires.entries()) {
+        if (
+          Object.entries(where).every(
+            ([k, v]) => wire[k as keyof ChangedWire] === v,
+          )
+        ) {
+          Object.assign(wire, data);
+          matched.push({ index: i, wire });
+        }
+      }
+      return ok({
+        action: "update",
+        element: "WIRE",
+        updated: matched.length,
+        matches: matched.map(({ index, wire }) => ({ index, ...wire })),
+      });
+    },
+  );
+  server.registerTool(
+    "ewb_delete_wire",
+    {
+      description: "Delete wires from the circuit",
+      inputSchema: z.object({ where: wireSchema.partial() }),
+    },
+    ({ where }) => {
+      const circuit = c();
+      const indices: number[] = [];
+      for (let i = circuit.wires.length - 1; i >= 0; i--) {
+        const wire = circuit.wires[i]!;
+        if (
+          Object.entries(where).every(
+            ([k, v]) => wire[k as keyof ChangedWire] === v,
+          )
+        ) {
+          circuit.wires.splice(i, 1);
+          indices.push(i);
+        }
+      }
+      return ok({
+        action: "remove",
+        element: "WIRE",
+        removed: indices.length,
+        indices: indices.reverse(),
+      });
+    },
+  );
 });
