@@ -42,6 +42,7 @@ import {
   findOutputSchema,
   fuseSchema,
   inductorSchema,
+  loadFileSchema,
   relaySchema,
   removeOutputSchema,
   resistorSchema,
@@ -53,6 +54,7 @@ import {
   voltmeterSchema,
   wireSchema,
 } from "./schemas";
+import { decodeFile, encodeFile } from "./ewb";
 
 const DELIMITERS = [0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20];
 
@@ -1180,13 +1182,19 @@ const handler = createMcpHandler((server) => {
     {
       description: "Load an EWB circuit file",
       inputSchema: z.string(),
-      outputSchema: z.void(),
+      outputSchema: loadFileSchema,
     },
     async (fileContents) => {
-      circuit = deserialize(
-        new Uint8Array(fileContents.split("").map((c) => c.charCodeAt(0))),
-      );
-      return { content: [] };
+      const { decoded } = decodeFile(fileContents);
+      circuit = deserialize(decoded);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ status: "success", length: decoded.length }),
+          },
+        ],
+      };
     },
   );
   CUD(
@@ -1489,8 +1497,11 @@ const handler = createMcpHandler((server) => {
     },
     async () => {
       const circuit = c();
+      const propBag = serialize(circuit);
+      const data = new TextEncoder().encode(propBag);
+      const ewbText = encodeFile(data, 2);
       return {
-        content: [{ type: "text" as const, text: serialize(circuit) }],
+        content: [{ type: "text" as const, text: ewbText }],
       };
     },
   );

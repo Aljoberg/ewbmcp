@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+// misc
+
+export const loadFileSchema = z.object({
+    status: z.enum(["success", "error"]),
+    length: z.number()
+})
+
 // wires
 
 export const wireSchema = z.object({
