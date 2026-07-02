@@ -167,3 +167,49 @@ export const voltmeterSchema = z.object({
     .optional()
     .default(0),
 });
+
+// output schemas
+
+export const addOutputSchema = z.object({
+  action: z.literal("add"),
+  element: z.string(),
+  index: z.number(),
+  data: z.record(z.string(), z.unknown()),
+});
+
+export const updateOutputSchema = z.object({
+  action: z.literal("update"),
+  element: z.string(),
+  updated: z.number(),
+  matches: z.array(
+    z.object({
+      index: z.number(),
+      data: z.record(z.string(), z.unknown()),
+    }),
+  ),
+});
+
+export const removeOutputSchema = z.object({
+  action: z.literal("remove"),
+  element: z.string(),
+  removed: z.number(),
+  indices: z.array(z.number()),
+});
+
+export const findOutputSchema = z.object({
+  action: z.literal("find"),
+  element: z.string(),
+  total: z.number(),
+  matches: z.array(
+    z.object({
+      index: z.number(),
+      data: z.record(z.string(), z.unknown()),
+    }),
+  ),
+});
+
+export const elementDataOutputSchema = z.object({
+  element: z.string(),
+  index: z.number(),
+  data: z.record(z.string(), z.unknown()),
+});

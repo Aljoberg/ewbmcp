@@ -32,18 +32,23 @@ import { z } from "zod";
 import {
   acCurrentSourceSchema,
   acVoltageSourceSchema,
+  addOutputSchema,
   ammeterSchema,
   batterySchema,
   capacitorSchema,
   currentControlledSwitchSchema,
   dcCurrentSourceSchema,
+  elementDataOutputSchema,
+  findOutputSchema,
   fuseSchema,
   inductorSchema,
   relaySchema,
+  removeOutputSchema,
   resistorSchema,
   rotationSchema,
   switchSchema,
   timeDelaySwitchSchema,
+  updateOutputSchema,
   voltageControlledSwitchSchema,
   voltmeterSchema,
   wireSchema,
@@ -1068,7 +1073,7 @@ const handler = createMcpHandler((server) => {
         action: "add",
         element: elementName,
         index: circuit.elements.length - 1,
-        ...Object.fromEntries(
+        data: Object.fromEntries(
           Object.entries(elem).filter(([k]) => !k.startsWith("_")),
         ),
       });
@@ -1095,7 +1100,7 @@ const handler = createMcpHandler((server) => {
         updated: matched.length,
         matches: matched.map(({ index, elem }) => ({
           index,
-          ...Object.fromEntries(
+          data: Object.fromEntries(
             Object.entries(elem).filter(([k]) => !k.startsWith("_")),
           ),
         })),
@@ -1110,7 +1115,8 @@ const handler = createMcpHandler((server) => {
         if (
           elem.name === elementName &&
           Object.entries(where).every(
-            ([k, v]) => (elem as Record<string, unknown>)[k] === v,
+            ([k, v]) =>
+              (elem as Record<string, unknown>)[k] === v || elem.data[k] === v,
           )
         ) {
           circuit.elements.splice(i, 1);
@@ -1125,8 +1131,10 @@ const handler = createMcpHandler((server) => {
       });
     }
 
-    server.registerTool(`ewb_add_${shortName}`, config, (input: unknown) =>
-      cbs.add(input as z.infer<T>, { add }),
+    server.registerTool(
+      `ewb_add_${shortName}`,
+      { ...config, outputSchema: addOutputSchema },
+      (input: unknown) => cbs.add(input as z.infer<T>, { add }),
     );
 
     if (cbs.update) {
@@ -1136,6 +1144,7 @@ const handler = createMcpHandler((server) => {
         {
           ...config,
           inputSchema: z.object({ where: partialSchema, data: partialSchema }),
+          outputSchema: updateOutputSchema,
         },
         (input) =>
           cbs.update!(
@@ -1148,7 +1157,11 @@ const handler = createMcpHandler((server) => {
       const partialSchema = schema.partial();
       server.registerTool(
         `ewb_delete_${shortName}`,
-        { ...config, inputSchema: z.object({ where: partialSchema }) },
+        {
+          ...config,
+          inputSchema: z.object({ where: partialSchema }),
+          outputSchema: removeOutputSchema,
+        },
         (input: unknown) =>
           cbs.remove!(input as { where: Partial<z.infer<T>> }, { remove }),
       );
@@ -1157,7 +1170,11 @@ const handler = createMcpHandler((server) => {
 
   server.registerTool(
     "ewb_load_file",
-    { description: "Load an EWB circuit file", inputSchema: z.string() },
+    {
+      description: "Load an EWB circuit file",
+      inputSchema: z.string(),
+      outputSchema: z.void(),
+    },
     async (fileContents) => {
       circuit = deserialize(
         new Uint8Array(fileContents.split("").map((c) => c.charCodeAt(0))),
@@ -1477,6 +1494,7 @@ const handler = createMcpHandler((server) => {
         idx: z.number(),
         getHiddenFields: z.boolean().optional().default(false),
       }),
+      outputSchema: elementDataOutputSchema,
     },
     async ({ idx, getHiddenFields }) => {
       const circuit = c();
@@ -1489,7 +1507,7 @@ const handler = createMcpHandler((server) => {
       return ok({
         element: elem.name,
         index: idx,
-        ...Object.fromEntries(
+        data: Object.fromEntries(
           Object.entries(elem.data).filter(
             ([k]) => getHiddenFields || !k.startsWith("_"),
           ),
@@ -1497,10 +1515,54 @@ const handler = createMcpHandler((server) => {
       });
     },
   );
+  // find elements
+  server.registerTool(
+    "ewb_find_elements",
+    {
+      description:
+        "Find elements in the circuit matching optional name and criteria",
+      inputSchema: z.object({
+        elementName: z.string().optional(),
+        where: z.record(z.string(), z.unknown()).optional(),
+      }),
+      outputSchema: findOutputSchema,
+    },
+    ({ elementName, where }) => {
+      const circuit = c();
+      const matches: { index: number; elem: Element }[] = [];
+      for (const [i, elem] of circuit.elements.entries()) {
+        if (elementName && elem.name !== elementName) continue;
+        if (
+          where &&
+          !Object.entries(where).every(
+            ([k, v]) =>
+              (elem as Record<string, unknown>)[k] === v || elem.data[k] === v,
+          )
+        )
+          continue;
+        matches.push({ index: i, elem });
+      }
+      return ok({
+        action: "find",
+        element: elementName ?? "*",
+        total: matches.length,
+        matches: matches.map(({ index, elem }) => ({
+          index,
+          data: Object.fromEntries(
+            Object.entries(elem).filter(([k]) => !k.startsWith("_")),
+          ),
+        })),
+      });
+    },
+  );
   // wires
   server.registerTool(
     "ewb_add_wire",
-    { description: "Add a wire to the circuit", inputSchema: wireSchema },
+    {
+      description: "Add a wire to the circuit",
+      inputSchema: wireSchema,
+      outputSchema: addOutputSchema,
+    },
     (input) => {
       const circuit = c();
       addWire({ circuit, ...input });
@@ -1508,8 +1570,7 @@ const handler = createMcpHandler((server) => {
         action: "add",
         element: "WIRE",
         index: circuit.wires.length - 1,
-        ...input,
-        wireId: circuit.wires.length - 1,
+        data: { ...input, wireId: circuit.wires.length - 1 },
       });
     },
   );
@@ -1521,6 +1582,7 @@ const handler = createMcpHandler((server) => {
         where: wireSchema.partial(),
         data: wireSchema.partial(),
       }),
+      outputSchema: updateOutputSchema,
     },
     ({ where, data }) => {
       const circuit = c();
@@ -1539,7 +1601,7 @@ const handler = createMcpHandler((server) => {
         action: "update",
         element: "WIRE",
         updated: matched.length,
-        matches: matched.map(({ index, wire }) => ({ index, ...wire })),
+        matches: matched.map(({ index, wire }) => ({ index, data: wire })),
       });
     },
   );
@@ -1548,6 +1610,7 @@ const handler = createMcpHandler((server) => {
     {
       description: "Delete wires from the circuit",
       inputSchema: z.object({ where: wireSchema.partial() }),
+      outputSchema: removeOutputSchema,
     },
     ({ where }) => {
       const circuit = c();
