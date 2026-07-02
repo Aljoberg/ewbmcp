@@ -1137,35 +1137,42 @@ const handler = createMcpHandler((server) => {
       (input: unknown) => cbs.add(input as z.infer<T>, { add }),
     );
 
-    if (cbs.update) {
-      const partialSchema = schema.partial();
-      server.registerTool(
-        `ewb_update_${shortName}`,
-        {
-          ...config,
-          inputSchema: z.object({ where: partialSchema, data: partialSchema }),
-          outputSchema: updateOutputSchema,
-        },
-        (input) =>
-          cbs.update!(
-            input as { where: Partial<z.infer<T>>; data: Partial<z.infer<T>> },
-            { update },
-          ),
-      );
-    }
-    if (cbs.remove) {
-      const partialSchema = schema.partial();
-      server.registerTool(
-        `ewb_delete_${shortName}`,
-        {
-          ...config,
-          inputSchema: z.object({ where: partialSchema }),
-          outputSchema: removeOutputSchema,
-        },
-        (input: unknown) =>
-          cbs.remove!(input as { where: Partial<z.infer<T>> }, { remove }),
-      );
-    }
+    const partialSchema = schema.partial();
+    const updateFn =
+      cbs.update ??
+      ((
+        input: { where: Partial<z.infer<T>>; data: Partial<z.infer<T>> },
+        { update: u }: { update: typeof update },
+      ) => u(input.where, input.data));
+    const removeFn =
+      cbs.remove ??
+      ((
+        input: { where: Partial<z.infer<T>> },
+        { remove: r }: { remove: typeof remove },
+      ) => r(input.where));
+
+    server.registerTool(
+      `ewb_update_${shortName}`,
+      {
+        ...config,
+        inputSchema: z.object({ where: partialSchema, data: partialSchema }),
+        outputSchema: updateOutputSchema,
+      },
+      (input) =>
+        updateFn(
+          input as { where: Partial<z.infer<T>>; data: Partial<z.infer<T>> },
+          { update },
+        ),
+    );
+    server.registerTool(
+      `ewb_delete_${shortName}`,
+      {
+        ...config,
+        inputSchema: z.object({ where: partialSchema }),
+        outputSchema: removeOutputSchema,
+      },
+      (input) => removeFn(input as { where: Partial<z.infer<T>> }, { remove }),
+    );
   }
 
   server.registerTool(
@@ -1488,17 +1495,17 @@ const handler = createMcpHandler((server) => {
     },
   );
   server.registerTool(
-    "ewb_get_element_by_idx",
+    "ewb_get_element_by_index",
     {
       inputSchema: z.object({
-        idx: z.number(),
+        index: z.number(),
         getHiddenFields: z.boolean().optional().default(false),
       }),
       outputSchema: elementDataOutputSchema,
     },
-    async ({ idx, getHiddenFields }) => {
+    async ({ index, getHiddenFields }) => {
       const circuit = c();
-      const elem = circuit.elements[idx];
+      const elem = circuit.elements[index];
       if (!elem)
         return {
           content: [{ type: "text", text: "Element not found" }],
@@ -1506,7 +1513,7 @@ const handler = createMcpHandler((server) => {
         };
       return ok({
         element: elem.name,
-        index: idx,
+        index,
         data: Object.fromEntries(
           Object.entries(elem.data).filter(
             ([k]) => getHiddenFields || !k.startsWith("_"),
@@ -1524,10 +1531,11 @@ const handler = createMcpHandler((server) => {
       inputSchema: z.object({
         elementName: z.string().optional(),
         where: z.record(z.string(), z.unknown()).optional(),
+        getHiddenFields: z.boolean().optional().default(false),
       }),
       outputSchema: findOutputSchema,
     },
-    ({ elementName, where }) => {
+    ({ elementName, where, getHiddenFields }) => {
       const circuit = c();
       const matches: { index: number; elem: Element }[] = [];
       for (const [i, elem] of circuit.elements.entries()) {
@@ -1549,7 +1557,9 @@ const handler = createMcpHandler((server) => {
         matches: matches.map(({ index, elem }) => ({
           index,
           data: Object.fromEntries(
-            Object.entries(elem).filter(([k]) => !k.startsWith("_")),
+            Object.entries(elem).filter(
+              ([k]) => getHiddenFields || !k.startsWith("_"),
+            ),
           ),
         })),
       });
