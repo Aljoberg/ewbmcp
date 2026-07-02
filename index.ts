@@ -1008,51 +1008,151 @@ const handler = createMcpHandler((server) => {
     if (!circuit) throw new Error("No circuit loaded");
     return circuit;
   }
-  function el(name: string, details: Record<string, unknown>) {
+  function ok(data: unknown) {
     return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(
-            { element: name, index: circuit!.elements.length - 1, ...details },
-            null,
-            2,
-          ),
-        },
-      ],
+      content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
     };
   }
 
-  const CUD: typeof server.registerTool = (name, config, cb) => {
-    // add
-    function addElement(
-      props: typeof addBaseElement extends (args: infer U) => void ? U : never,
-    ) {
+  type CUDAddProps<T extends Element> = {
+    rotation: number;
+    x: number;
+    y: number;
+    data: T["data"];
+    modelName?: string;
+    [key: string]: unknown;
+  };
+
+  function CUD<T extends z.ZodObject<any>>(
+    shortName: string,
+    elementName: string,
+    schema: T,
+    config: { description: string },
+    cbs: {
+      add: (
+        input: z.infer<T>,
+        ctx: {
+          add: <U extends Element>(
+            props: CUDAddProps<U>,
+          ) => ReturnType<typeof ok>;
+        },
+      ) => ReturnType<typeof ok>;
+      update?: (
+        input: {
+          where: Partial<z.infer<T>>;
+          data: Partial<z.infer<T>>;
+        },
+        ctx: {
+          update: (
+            where: Partial<z.infer<T>>,
+            data: Partial<z.infer<T>>,
+          ) => ReturnType<typeof ok>;
+        },
+      ) => ReturnType<typeof ok>;
+      remove?: (
+        input: { where: Partial<z.infer<T>> },
+        ctx: {
+          remove: (where: Partial<z.infer<T>>) => ReturnType<typeof ok>;
+        },
+      ) => ReturnType<typeof ok>;
+    },
+  ) {
+    function add<U extends Element>(props: CUDAddProps<U>) {
       const circuit = c();
-      const elem = addBaseElement({ ...props, circuit }); // TODO remove circuit from addelement
-      return Object.fromEntries(
-        Object.entries(elem).filter(([k]) => !k.startsWith("_")),
+      const elem = addBaseElement({
+        circuit,
+        name: elementName,
+        ...props,
+      });
+      return ok({
+        action: "add",
+        element: elementName,
+        index: circuit.elements.length - 1,
+        ...Object.fromEntries(
+          Object.entries(elem).filter(([k]) => !k.startsWith("_")),
+        ),
+      });
+    }
+
+    function update(where: Partial<z.infer<T>>, data: Partial<z.infer<T>>) {
+      const circuit = c();
+      const matched: { index: number; elem: Element }[] = [];
+      for (const [i, elem] of circuit.elements.entries()) {
+        if (
+          elem.name === elementName &&
+          Object.entries(where).every(
+            ([k, v]) => (elem as Record<string, unknown>)[k] === v,
+          )
+        ) {
+          Object.assign(elem, data);
+          matched.push({ index: i, elem });
+        }
+      }
+      return ok({
+        action: "update",
+        element: elementName,
+        updated: matched.length,
+        matches: matched.map(({ index, elem }) => ({
+          index,
+          ...Object.fromEntries(
+            Object.entries(elem).filter(([k]) => !k.startsWith("_")),
+          ),
+        })),
+      });
+    }
+
+    function remove(where: Record<string, unknown>) {
+      const circuit = c();
+      const indices: number[] = [];
+      for (let i = circuit.elements.length - 1; i >= 0; i--) {
+        const elem = circuit.elements[i]!;
+        if (
+          elem.name === elementName &&
+          Object.entries(where).every(
+            ([k, v]) => (elem as Record<string, unknown>)[k] === v,
+          )
+        ) {
+          circuit.elements.splice(i, 1);
+          indices.push(i);
+        }
+      }
+      return ok({
+        action: "remove",
+        element: elementName,
+        removed: indices.length,
+        indices: indices.reverse(),
+      });
+    }
+
+    server.registerTool(`ewb_add_${shortName}`, config, (input: unknown) =>
+      cbs.add(input as z.infer<T>, { add }),
+    );
+
+    if (cbs.update) {
+      const partialSchema = schema.partial();
+      server.registerTool(
+        `ewb_update_${shortName}`,
+        {
+          ...config,
+          inputSchema: z.object({ where: partialSchema, data: partialSchema }),
+        },
+        (input) =>
+          cbs.update!(
+            input as { where: Partial<z.infer<T>>; data: Partial<z.infer<T>> },
+            { update },
+          ),
       );
     }
-    function updateElement(
-      where: typeof addBaseElement extends (args: infer U) => void
-        ? Partial<U>
-        : never,
-      data: typeof addBaseElement extends (args: infer U) => void
-        ? Partial<U>
-        : never,
-    ) {
-      // add where logic
-      // add data logic
+    if (cbs.remove) {
+      const partialSchema = schema.partial();
+      server.registerTool(
+        `ewb_delete_${shortName}`,
+        { ...config, inputSchema: z.object({ where: partialSchema }) },
+        (input: unknown) =>
+          cbs.remove!(input as { where: Partial<z.infer<T>> }, { remove }),
+      );
     }
-    // add delete
-    server.registerTool(`ewb_add_${name}`, config, (...args) =>
-      cb(...args, addElement),
-    );
-    server.registerTool(`ewb_update_${name}`, {...config, inputSchema: z.object({ where: config?.inputSchema?.partial(), data: config.inputSchema })}, (...args) =>
-      cb(...args, updateElement),
-    );
-  };
+  }
 
   server.registerTool(
     "ewb_load_file",
@@ -1064,359 +1164,295 @@ const handler = createMcpHandler((server) => {
       return { content: [] };
     },
   );
-  server.registerTool(
-    "ewb_add_resistor",
+  CUD(
+    "resistor",
+    "RESISTOR",
+    resistorSchema,
     {
       description: "Add a resistor to the circuit",
-      inputSchema: resistorSchema,
     },
-    async ({ rotation, x, y, resistance, resistanceMultiplier }) => {
-      c();
-      addBaseElement<Resistor>({
-        circuit: circuit!,
-        name: "RESISTOR",
-        rotation,
-        x,
-        y,
-        data: { resistance, TC1: 0, TC2: 0, Tnom: 5 },
-        multipliers: {
-          resistance: resistanceMultiplier,
-          TC1: 0,
-          TC2: 0,
-          Tnom: 0,
-        },
-        _modelUnits: [multiplierIndex(resistanceMultiplier), 0, 0, 0],
-      });
-      return el("Resistor", {
-        position: { x, y },
-        rotation,
-        resistance,
-        multiplier: resistanceMultiplier,
-      });
+    {
+      add: (input, { add }) =>
+        add<Resistor>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: { resistance: input.resistance, TC1: 0, TC2: 0, Tnom: 5 },
+          multipliers: {
+            resistance: input.resistanceMultiplier,
+            TC1: 0,
+            TC2: 0,
+            Tnom: 0,
+          },
+          _modelUnits: [multiplierIndex(input.resistanceMultiplier), 0, 0, 0],
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_battery",
+  CUD(
+    "battery",
+    "BATTERY",
+    batterySchema,
     {
       description: "Add a battery (DC voltage source) to the circuit",
-      inputSchema: batterySchema,
     },
-    async ({ rotation, x, y, voltage }) => {
-      c();
-      addBaseElement<Battery>({
-        circuit: circuit!,
-        name: "BATTERY",
-        rotation,
-        x,
-        y,
-        data: { voltage },
-      });
-      return el("Battery", { position: { x, y }, rotation, voltage });
+    {
+      add: (input, { add }) =>
+        add<Battery>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: { voltage: input.voltage },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_capacitor",
+  CUD(
+    "capacitor",
+    "CAPACITOR",
+    capacitorSchema,
     {
       description: "Add a capacitor to the circuit",
-      inputSchema: capacitorSchema,
     },
-    async ({ rotation, x, y, capacitance, multiplier }) => {
-      c();
-      addBaseElement<Capacitor>({
-        circuit: circuit!,
-        name: "CAPACITOR",
-        rotation,
-        x,
-        y,
-        data: { capacitance },
-        _modelUnits: [multiplierIndex(multiplier)],
-      });
-      return el("Capacitor", {
-        position: { x, y },
-        rotation,
-        capacitance,
-        multiplier,
-      });
+    {
+      add: (input, { add }) =>
+        add<Capacitor>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: { capacitance: input.capacitance },
+          _modelUnits: [multiplierIndex(input.multiplier)],
+        }),
+      update: ({ where, data }, { update }) => update(where, data),
     },
   );
-  server.registerTool(
-    "ewb_add_inductor",
+  CUD(
+    "inductor",
+    "INDUCTOR",
+    inductorSchema,
     {
       description: "Add an inductor to the circuit",
-      inputSchema: inductorSchema,
     },
-    async ({ rotation, x, y, inductance, multiplier }) => {
-      c();
-      addBaseElement<Inductor>({
-        circuit: circuit!,
-        name: "INDUCTOR",
-        rotation,
-        x,
-        y,
-        data: { inductance },
-        _modelUnits: [multiplierIndex(multiplier)],
-      });
-      return el("Inductor", {
-        position: { x, y },
-        rotation,
-        inductance,
-        multiplier,
-      });
+    {
+      add: (input, { add }) =>
+        add<Inductor>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: { inductance: input.inductance },
+          _modelUnits: [multiplierIndex(input.multiplier)],
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_ac_voltage_source",
+  CUD(
+    "ac_voltage_source",
+    "AC_VOLTAGE_SOURCE",
+    acVoltageSourceSchema,
     {
       description: "Add an AC voltage source to the circuit",
-      inputSchema: acVoltageSourceSchema,
     },
-    async ({ rotation, x, y, peakVoltage, frequency, phase }) => {
-      c();
-      addBaseElement<AcVoltageSource>({
-        circuit: circuit!,
-        name: "AC_VOLTAGE_SOURCE",
-        rotation,
-        x,
-        y,
-        data: { peakVoltage, frequency, phase },
-      });
-      return el("AC Voltage Source", {
-        position: { x, y },
-        rotation,
-        peakVoltage,
-        frequency,
-        phase,
-      });
+    {
+      add: (input, { add }) =>
+        add<AcVoltageSource>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: {
+            peakVoltage: input.peakVoltage,
+            frequency: input.frequency,
+            phase: input.phase,
+          },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_dc_current_source",
+  CUD(
+    "dc_current_source",
+    "DC_CURRENT_SOURCE",
+    dcCurrentSourceSchema,
     {
       description: "Add a DC current source to the circuit",
-      inputSchema: dcCurrentSourceSchema,
     },
-    async ({ rotation, x, y, current }) => {
-      c();
-      addBaseElement<DcCurrentSource>({
-        circuit: circuit!,
-        name: "DC_CURRENT_SOURCE",
-        rotation,
-        x,
-        y,
-        data: { current },
-      });
-      return el("DC Current Source", { position: { x, y }, rotation, current });
+    {
+      add: (input, { add }) =>
+        add<DcCurrentSource>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: { current: input.current },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_ac_current_source",
+  CUD(
+    "ac_current_source",
+    "AC_CURRENT_SOURCE",
+    acCurrentSourceSchema,
     {
       description: "Add an AC current source to the circuit",
-      inputSchema: acCurrentSourceSchema,
     },
-    async ({ rotation, x, y, peakCurrent, frequency, phase }) => {
-      c();
-      addBaseElement<AcCurrentSource>({
-        circuit: circuit!,
-        name: "AC_CURRENT_SOURCE",
-        rotation,
-        x,
-        y,
-        data: { peakCurrent, frequency, phase },
-      });
-      return el("AC Current Source", {
-        position: { x, y },
-        rotation,
-        peakCurrent,
-        frequency,
-        phase,
-      });
+    {
+      add: (input, { add }) =>
+        add<AcCurrentSource>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: {
+            peakCurrent: input.peakCurrent,
+            frequency: input.frequency,
+            phase: input.phase,
+          },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_fuse",
+  CUD(
+    "fuse",
+    "FUSE",
+    fuseSchema,
     {
       description: "Add a fuse to the circuit",
-      inputSchema: fuseSchema,
     },
-    async ({ rotation, x, y, rating, responseTime }) => {
-      c();
-      addBaseElement<Fuse>({
-        circuit: circuit!,
-        name: "FUSE",
-        rotation,
-        x,
-        y,
-        data: { rating, responseTime },
-      });
-      return el("Fuse", { position: { x, y }, rotation, rating, responseTime });
+    {
+      add: (input, { add }) =>
+        add<Fuse>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: { rating: input.rating, responseTime: input.responseTime },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_relay",
+  CUD(
+    "relay",
+    "RELAY",
+    relaySchema,
     {
       description: "Add a relay to the circuit",
-      inputSchema: relaySchema,
     },
-    async ({
-      rotation,
-      x,
-      y,
-      pickupVoltage,
-      dropoutVoltage,
-      pickupTime,
-      dropoutTime,
-    }) => {
-      const circuit = c();
-      addBaseElement<Relay>({
-        circuit,
-        name: "RELAY",
-        rotation,
-        x,
-        y,
-        data: { pickupVoltage, dropoutVoltage, pickupTime, dropoutTime },
-      });
-      return el("Relay", {
-        position: { x, y },
-        rotation,
-        pickupVoltage,
-        dropoutVoltage,
-        pickupTime,
-        dropoutTime,
-      });
+    {
+      add: (input, { add }) =>
+        add<Relay>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: {
+            pickupVoltage: input.pickupVoltage,
+            dropoutVoltage: input.dropoutVoltage,
+            pickupTime: input.pickupTime,
+            dropoutTime: input.dropoutTime,
+          },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_switch",
+  CUD(
+    "switch",
+    "SWITCH",
+    switchSchema,
     {
       description: "Add a (normally open) switch to the circuit",
-      inputSchema: switchSchema,
     },
-    async ({ rotation, x, y, initialState }) => {
-      const circuit = c();
-      addBaseElement<Switch>({
-        circuit,
-        name: "SWITCH",
-        rotation,
-        x,
-        y,
-        data: { initialState },
-      });
-      return el("Switch", { position: { x, y }, rotation, initialState });
+    {
+      add: (input, { add }) =>
+        add<Switch>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: { initialState: input.initialState },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_time_delay_switch",
+  CUD(
+    "time_delay_switch",
+    "TIME_DELAY_SWITCH",
+    timeDelaySwitchSchema,
     {
       description: "Add a time-delay switch to the circuit",
-      inputSchema: timeDelaySwitchSchema,
     },
-    async ({ rotation, x, y, tOn, tOff, delayOn, delayOff }) => {
-      const circuit = c();
-      addBaseElement<TimeDelaySwitch>({
-        circuit,
-        name: "TIME_DELAY_SWITCH",
-        rotation,
-        x,
-        y,
-        data: { tOn, tOff, delayOn, delayOff },
-      });
-      return el("Time-Delay Switch", {
-        position: { x, y },
-        rotation,
-        tOn,
-        tOff,
-        delayOn,
-        delayOff,
-      });
+    {
+      add: (input, { add }) =>
+        add<TimeDelaySwitch>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: {
+            tOn: input.tOn,
+            tOff: input.tOff,
+            delayOn: input.delayOn,
+            delayOff: input.delayOff,
+          },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_voltage_controlled_switch",
+  CUD(
+    "voltage_controlled_switch",
+    "VOLTAGE_CONTROLLED_SWITCH",
+    voltageControlledSwitchSchema,
     {
       description: "Add a voltage-controlled switch to the circuit",
-      inputSchema: voltageControlledSwitchSchema,
     },
-    async ({ rotation, x, y, rOn, rOff, threshold }) => {
-      const circuit = c();
-      addBaseElement<VoltageControlledSwitch>({
-        circuit,
-        name: "VOLTAGE_CONTROLLED_SWITCH",
-        rotation,
-        x,
-        y,
-        data: { rOn, rOff, threshold },
-      });
-      return el("Voltage-Controlled Switch", {
-        position: { x, y },
-        rotation,
-        rOn,
-        rOff,
-        threshold,
-      });
+    {
+      add: (input, { add }) =>
+        add<VoltageControlledSwitch>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: {
+            rOn: input.rOn,
+            rOff: input.rOff,
+            threshold: input.threshold,
+          },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_current_controlled_switch",
+  CUD(
+    "current_controlled_switch",
+    "CURRENT_CONTROLLED_SWITCH",
+    currentControlledSwitchSchema,
     {
       description: "Add a current-controlled switch to the circuit",
-      inputSchema: currentControlledSwitchSchema,
     },
-    async ({ rotation, x, y, rOn, rOff, threshold }) => {
-      const circuit = c();
-      addBaseElement<CurrentControlledSwitch>({
-        circuit,
-        name: "CURRENT_CONTROLLED_SWITCH",
-        rotation,
-        x,
-        y,
-        data: { rOn, rOff, threshold },
-      });
-      return el("Current-Controlled Switch", {
-        position: { x, y },
-        rotation,
-        rOn,
-        rOff,
-        threshold,
-      });
+    {
+      add: (input, { add }) =>
+        add<CurrentControlledSwitch>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: {
+            rOn: input.rOn,
+            rOff: input.rOff,
+            threshold: input.threshold,
+          },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_ammeter",
+  CUD(
+    "ammeter",
+    "AMMETER",
+    ammeterSchema,
     {
       description: "Add an ammeter to the circuit (mode: 0=DC, 1=AC)",
-      inputSchema: ammeterSchema,
     },
-    async ({ rotation, x, y, mode }) => {
-      const circuit = c();
-      addBaseElement<Ammeter>({
-        circuit,
-        name: "AMMETER",
-        rotation,
-        x,
-        y,
-        data: { mode },
-      });
-      return el("Ammeter", { position: { x, y }, rotation, mode });
+    {
+      add: (input, { add }) =>
+        add<Ammeter>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: { mode: input.mode },
+        }),
     },
   );
-  server.registerTool(
-    "ewb_add_voltmeter",
+  CUD(
+    "voltmeter",
+    "VOLTMETER",
+    voltmeterSchema,
     {
       description: "Add a voltmeter to the circuit (mode: 0=DC, 1=AC)",
-      inputSchema: voltmeterSchema,
     },
-    async ({ rotation, x, y, mode }) => {
-      const circuit = c();
-      addBaseElement<Voltmeter>({
-        circuit,
-        name: "VOLTMETER",
-        rotation,
-        x,
-        y,
-        data: { mode },
-      });
-      return el("Voltmeter", { position: { x, y }, rotation, mode });
+    {
+      add: (input, { add }) =>
+        add<Voltmeter>({
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          data: { mode: input.mode },
+        }),
     },
   );
   server.registerTool(
@@ -1449,14 +1485,15 @@ const handler = createMcpHandler((server) => {
           content: [{ type: "text", text: "Element not found" }],
           isError: true,
         };
-      return el(
-        elem.name,
-        Object.fromEntries(
+      return ok({
+        element: elem.name,
+        index: idx,
+        ...Object.fromEntries(
           Object.entries(elem.data).filter(
             ([k]) => getHiddenFields || !k.startsWith("_"),
           ),
         ),
-      );
+      });
     },
   );
   // wires
