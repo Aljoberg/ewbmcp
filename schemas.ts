@@ -237,6 +237,33 @@ export const bulbSchema = z.object({
   maxVoltage: z.number(),
 });
 
+export const gateTypeSchema = z.enum([
+  "AND",
+  "OR",
+  "NOT",
+  "NOR",
+  "NAND",
+  "XOR",
+  "XNOR",
+]);
+
+export const gateSchema = z.object({
+  rotation: rotationSchema.optional().default(0),
+  x: z.number(),
+  y: z.number(),
+  gateType: gateTypeSchema,
+  inputCount: z.number().min(2).max(8).optional().default(2),
+});
+
+export const probeSchema = z.object({
+  rotation: z
+    .union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)])
+    .optional()
+    .default(0),
+  x: z.number(),
+  y: z.number(),
+});
+
 // output schemas
 
 export const addOutputSchema = z.object({

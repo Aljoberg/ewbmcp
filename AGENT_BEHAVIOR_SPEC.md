@@ -83,25 +83,6 @@ Unless explicitly forbidden by the user.
 
 ---
 
-## 5. Canonical Circuit Templates
-
-Default builds MUST follow:
-
-### Series DC Circuit
-
-Battery → Ammeter → Resistor → Battery(−)
-
-### RC Circuit
-
-Battery → Resistor → Capacitor → Battery(−)
-
-### Voltage Divider
-
-Battery → R1 → R2 → Battery(−)
-
-If user request is vague, use canonical template.
-
----
 
 ## 6. Ammeter Rules (STRICT)
 
@@ -241,11 +222,211 @@ The MCP accepts public rotation values in degrees:
 
 The implementation converts those degree values to EWB's internal `Position[0]` index when serializing and converts them back when loading files.
 
-Pin conventions are component-specific. If you are unsure, inspect a known-good `.ewb` example containing the component and copy the pattern.
+## 📌 Pin Index → Physical Orientation Reference (Empirical EWB Mapping)
 
-Known critical case:
+This table reflects observed pin orientation inferred from labeled connection probes in loaded EWB circuits.
 
-- The ammeter's pin `0` is on the right side at `rotation: 0`, pin `1` on the left. Do NOT rotate the ammeter to flip pins — **rotation negates the output** (current reads negative). Instead, just pick the correct pin index: use **pin 1** for left connections, **pin 0** for right.
+> ⚠️ Note: This is a semantic interpretation layer. Pin indices remain authoritative; orientation is inferred.
+
+| Component         | Pin Index | Orientation     |
+| ----------------- | --------- | --------------- |
+| BULB              | 0         | Left            |
+| BULB              | 1         | Right           |
+| PNP_TRANSISTOR    | 0         | Left            |
+| PNP_TRANSISTOR    | 1         | Bottom          |
+| PNP_TRANSISTOR    | 2         | Top             |
+| NPN_TRANSISTOR    | 0         | Left            |
+| NPN_TRANSISTOR    | 1         | Top             |
+| NPN_TRANSISTOR    | 2         | Bottom          |
+| DIODE             | 0         | Left (anode)    |
+| DIODE             | 1         | Right (cathode) |
+| LED               | 0         | Left            |
+| LED               | 1         | Right           |
+| CONNECTOR (4-pin) | 0         | Left            |
+| CONNECTOR (4-pin) | 1         | Top             |
+| CONNECTOR (4-pin) | 2         | Right           |
+| CONNECTOR (4-pin) | 3         | Bottom          |
+
+---
+
+## 🧠 Usage Rule
+
+- Pin indices are fixed logical ports.
+- Orientation is inferred from empirical labeling.
+- Do NOT rotate components to fix pin mismatch.
+- Always prefer correct pin selection over visual correction.
+
+---
+
+## 🔧 Design Principle
+
+Pin index is semantic; orientation is interpretive.
+
+## 📌 Pin Index → Physical Orientation Reference (Logic Gates – Extended EWB Mapping)
+
+---
+
+## 🔧 Canonical Rule (IMPORTANT NORMALIZATION)
+
+Across this circuit family:
+
+- **Pin 2 (or last pin) = OUTPUT → always RIGHT**
+- **Pins 0/1 = INPUTS → always LEFT SIDE (top-to-bottom ordering)**
+- NOT gate is the only 1-input exception
+- Gate inversion (NAND/NOR/XNOR) does NOT change pin layout
+
+---
+
+## 🔷 2-INPUT GATES (Canonical Layout)
+
+| Component | Pin Index | Orientation      |
+| --------- | --------- | ---------------- |
+| AND2      | 0         | Top Input (A)    |
+| AND2      | 1         | Bottom Input (B) |
+| AND2      | 2         | Right Output     |
+| OR2       | 0         | Top Input (A)    |
+| OR2       | 1         | Bottom Input (B) |
+| OR2       | 2         | Right Output     |
+| NAND2     | 0         | Top Input (A)    |
+| NAND2     | 1         | Bottom Input (B) |
+| NAND2     | 2         | Right Output     |
+| NOR2      | 0         | Top Input (A)    |
+| NOR2      | 1         | Bottom Input (B) |
+| NOR2      | 2         | Right Output     |
+| XOR2      | 0         | Top Input (A)    |
+| XOR2      | 1         | Bottom Input (B) |
+| XOR2      | 2         | Right Output     |
+| XNOR2     | 0         | Top Input (A)    |
+| XNOR2     | 1         | Bottom Input (B) |
+| XNOR2     | 2         | Right Output     |
+
+---
+
+## 🔶 3-INPUT AND (for consistency with observed circuit)
+
+| Component | Pin Index | Orientation      |
+| --------- | --------- | ---------------- |
+| AND3      | 0         | Top Input (A)    |
+| AND3      | 1         | Middle Input (B) |
+| AND3      | 2         | Bottom Input (C) |
+| AND3      | 3         | Right Output     |
+
+---
+
+## 🔷 NOT GATE (Inverter)
+
+| Component | Pin Index | Orientation  |
+| --------- | --------- | ------------ |
+| NOT       | 0         | Left Input   |
+| NOT       | 1         | Right Output |
+
+---
+
+## 🧠 Key Insight
+
+### 1. Inversion does NOT affect pin geometry
+
+NOR/NAND/XNOR are electrically inverted versions of OR/AND/XOR but:
+
+- **Pin layout remains identical**
+- Only internal boolean function changes
+
+---
+
+### 2. All 2-input gates collapse to one geometric template
+
+This makes wiring predictable:
+
+Top Input → pin 0
+Bottom Input → pin 1
+Right Output → pin 2
+
+## 📌 Pin Index → Physical Orientation Reference (SWITCH – Empirical EWB Mapping)
+
+This table reflects observed pin orientation inferred from labeled probe nodes in an EWB switch circuit.
+
+---
+
+## 🔌 SWITCH (SPST / Digital Switch Element)
+
+| Pin Index | Orientation / Role                               | Evidence Label         |
+| --------- | ------------------------------------------------ | ---------------------- |
+| 0         | Common / Input (Left side)                       | “switch left input”    |
+| 1         | Output (Right side – ON path)                    | “switch right top on”  |
+| 2         | Output (Right side – OFF path / alternate state) | “switch right top off” |
+
+---
+
+## 🧠 Behavioral Interpretation (IMPORTANT)
+
+Unlike logic gates:
+
+- SWITCH is a **state-dependent routing element**
+- It exposes **multiple output pins depending on internal state**
+- Pin 1 and Pin 2 correspond to **alternate output states**
+
+### Internal mapping model:
+
+pin 0 → input (common node)
+pin 1 → output when switch = ON
+pin 2 → output when switch = OFF
+
+---
+
+## 🔧 Wiring Rule
+
+- Always treat **pin 0 as the source/input terminal**
+- Only one of {pin 1, pin 2} is electrically active at a time
+- Never assume geometric symmetry — state defines connectivity
+
+---
+
+## 🧠 Design Principle
+
+> “Switch pin indexing encodes _state routing_, not physical layout.”
+
+This ensures:
+
+- deterministic ON/OFF behavior across reloads
+- correct interpretation of multi-output switch models
+- stable automation for circuit traversal logic
+
+## ⏱️ TIME_DELAY_SWITCH — Parameters & Behavior
+
+The time-delay switch is a **one-shot (non-alternating) timer-controlled switch** (a Monostable). It does NOT produce repeating on/off cycles. It is implemented as `Mono` in `EXT/DIGITAL.DLL` (exports: `@MonoOpen`, `@MonoSetup`, `@MonoGetLinear`).
+
+### Parameter Table
+
+| Parameter  | Value array index | Observed role                                                |
+| ---------- | ----------------- | ------------------------------------------------------------ |
+| `tOn`      | `v[0]`            | ON-time duration (seconds) — how long switch stays closed    |
+| `tOff`     | `v[1]`            | Purpose unclear — does NOT control OFF-time in one-shot mode |
+| `delayOn`  | `v[2]`            | Initial delay before first ON transition (seconds)           |
+| `delayOff` | `v[3]`            | Purpose unclear — appears unused in one-shot mode            |
+
+### Sequence (Empirical)
+
+```
+t=0         switch OPEN
+t=delayOn   switch CLOSES
+t=delayOn + tOn   switch OPENS  (stays open forever)
+```
+
+### Example
+
+`delayOn=0.5, tOn=0.5, tOff=any, delayOff=any`:
+
+```
+t=0.0  → OPEN
+t=0.5  → CLOSES
+t=1.0  → OPENS (stays open)
+```
+
+### Notes
+
+- The parameter names `tOn`/`tOff`/`delayOn`/`delayOff` were chosen by the MCP. The EWB binary stores them opaquely as `Value r:4` with no corresponding string labels.
+- The simulation logic lives in `MonoGetLinear` inside `EXT/DIGITAL.DLL` (not XSPICE32.DLL). XSPICE32.DLL provides the SPICE engine; DIGITAL.DLL implements digital component models. The exact role of `tOff` and `delayOff` remains undetermined; they may be relevant only in a hypothetical astable (retriggerable) mode not exposed by this switch.
+- The switch has **4 pins** per the PartNum table. Pin layout is assumed to match the regular SWITCH (pin 0 = common/input, pins 1-2 = outputs) but has not been empirically verified with a labeled-ground test file.
 
 ## Multipliers
 
@@ -307,6 +488,8 @@ Use `add_<type>` to create supported base components:
 - `add_pnp_transistor`
 - `add_transformer`
 - `add_bulb`
+- `add_gate`
+- `add_probe`
 
 Use `find_elements` before bulk updates or deletes. `update_*` and `delete_*` match every element satisfying `where`, not just the first match.
 

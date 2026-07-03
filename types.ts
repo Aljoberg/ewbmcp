@@ -143,6 +143,7 @@ export interface Comp {
   Common: Common;
   ModelName?: string;
   Status: number;
+  Label?: string;
 }
 
 export interface Common {
@@ -159,6 +160,7 @@ export interface ExtComp {
   ModelName?: string;
   Status: number;
   Attributes?: Attributes;
+  Label?: string;
   [key: string]: unknown;
 }
 
@@ -365,6 +367,7 @@ export interface Element {
   /** Array of wire IDs connected to this element, ordered by pin index. */
   connectedWires: number[];
   type: ElementType;
+  label?: string;
   /** Raw Value array for serialization. */
   _value: number[] | null;
   /** Raw ModelUnits array for serialization. */

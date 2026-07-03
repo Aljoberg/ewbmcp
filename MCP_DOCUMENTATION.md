@@ -188,6 +188,22 @@ All components share these base fields:
 | `update_time_delay_switch` | `{ where, data }`                            |
 | `delete_time_delay_switch` | `{ where }`                                  |
 
+> **⚠️ Behavior: ONE-SHOT (non-alternating).** This component is implemented as a **Monostable** (`Mono` in `EXT/DIGITAL.DLL`, exports: `@MonoOpen`, `@MonoSetup`, `@MonoGetLinear`).
+>
+> 1. Switch starts OPEN
+> 2. After `delayOn` seconds, switch CLOSES
+> 3. After `tOn` seconds (from close), switch OPENS and stays off permanently
+> 4. `tOff` and `delayOff` — purpose unclear from reverse engineering; they do **not** produce alternating/astable cycles
+>
+> Empirical example (`delayOn=0.5, delayOff=1` with default `tOn`):
+>
+> - t=0.0 → OPEN
+> - t=0.5 → CLOSES (delayOn kicks in)
+> - t=1.0 → OPENS (tOn=0.5s after close)
+> - t>1.0 → stays OPEN forever (one-shot)
+
+> **Parameter names** (`tOn`, `tOff`, `delayOn`, `delayOff`) were chosen by the MCP. The underlying EWB binary stores them as an opaque `Value r:4` array. No corresponding string labels exist in the EXE — `MonoGetLinear` in `EXT/DIGITAL.DLL` consumes them positionally.
+
 #### voltage_controlled_switch
 
 | Tool                               | Input Fields                         |
@@ -294,6 +310,20 @@ All components share these base fields:
 | `add_bulb`    | rotation, x, y, maxPower, maxVoltage |
 | `update_bulb` | `{ where, data }`                    |
 | `delete_bulb` | `{ where }`                          |
+
+#### gate (logic gates)
+
+| Tool          | Input Fields                                                                                                           |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `add_gate`    | rotation, x, y, gateType ("AND"\|"OR"\|"NOT"\|"NOR"\|"NAND"\|"XOR"\|"XNOR"), inputCount? (2-8, default 2; N/A for NOT) |
+| `update_gate` | `{ where, data }` — `where`/`data` can include `gateType` and `inputCount`                                             |
+| `delete_gate` | `{ where }`                                                                                                            |
+
+#### probe (red logic probe)
+
+| Tool        | Input Fields   |
+| ----------- | -------------- |
+| `add_probe` | rotation, x, y |
 
 ---
 

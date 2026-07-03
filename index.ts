@@ -73,12 +73,15 @@ import {
   elementDataOutputSchema,
   findOutputSchema,
   fuseSchema,
+  gateSchema,
+  gateTypeSchema,
   groundSchema,
   inductorSchema,
   ledSchema,
   loadFileSchema,
   npnTransistorSchema,
   pnpTransistorSchema,
+  probeSchema,
   relaySchema,
   removeOutputSchema,
   resistorSchema,
@@ -539,6 +542,7 @@ export function deserialize(contents: Uint8Array) {
           y: comp.Position[2]!,
           refId: comp.Common.RefID,
           modelName: comp.ModelName ?? "",
+          label: comp.Label,
           data,
           connectedWires: getConnectedWireIds(changedElements.length),
           type: ElementType.BASE,
@@ -560,6 +564,7 @@ export function deserialize(contents: Uint8Array) {
           y: comp.Position[2]!,
           refId: comp.Common.RefID,
           modelName: comp.ModelName ?? "",
+          label: comp.Label,
           data: { value: v, data: comp.Data ?? "" },
           connectedWires: getConnectedWireIds(changedElements.length),
           type: ElementType.EXTENSION,
@@ -1662,6 +1667,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
+            _value: [ 0 ],
           }),
       },
     );
@@ -1677,6 +1683,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
+            _value: [ 0 ]
           }),
       },
     );
@@ -1692,6 +1699,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
+            _value: [ 0 ]
           }),
       },
     );
@@ -1707,6 +1715,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
+            _value: [ 0 ]
           }),
       },
     );
@@ -1722,6 +1731,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
+            _value: [ 0 ]
           }),
       },
     );
@@ -1737,6 +1747,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
+            _value: [ 0 ]
           }),
       },
     );
@@ -1752,6 +1763,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
+            _value: [ 0 ]
           }),
       },
     );
@@ -1767,6 +1779,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
+            _value: [ 0 ]
           }),
       },
     );
@@ -1783,6 +1796,180 @@ export const handler = createMcpHandler(
             y: input.y,
             data: { maxPower: input.maxPower, maxVoltage: input.maxVoltage },
           }),
+      },
+    );
+    function addGate(
+      rotation: number,
+      x: number,
+      y: number,
+      gateType: string,
+      inputCount: number,
+    ) {
+      const circuit = c();
+      const name =
+        gateType === "NOT" ? "DIGITAL:Not" : `DIGITAL:${gateType[0]!.toUpperCase() + gateType.slice(1).toLowerCase()}${inputCount}`;
+      addExtensionElement({
+        circuit,
+        name,
+        rotation,
+        x,
+        y,
+        value: {},
+        data: "",
+        modelName: "ideal",
+      });
+      return ok({
+        action: "add",
+        element: `${gateType}_GATE`,
+        index: circuit.elements.length - 1,
+        data: { name, gateType, inputCount },
+      });
+    }
+    server.registerTool(
+      "add_gate",
+      {
+        description: "Add a logic gate to the circuit",
+        inputSchema: gateSchema,
+        outputSchema: addOutputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
+      },
+      (input) =>
+        addGate(
+          input.rotation,
+          input.x,
+          input.y,
+          input.gateType,
+          input.inputCount,
+        ),
+    );
+    server.registerTool(
+      "update_gate",
+      {
+        description: "Update logic gates in the circuit",
+        inputSchema: z.object({
+          where: gateSchema.partial(),
+          data: gateSchema.partial(),
+        }),
+        outputSchema: updateOutputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
+      },
+      async ({ where, data }) => {
+        const circuit = c();
+        const matches: { index: number; name: string }[] = [];
+        for (const [i, elem] of circuit.elements.entries()) {
+          if (elem.type !== ElementType.EXTENSION) continue;
+          const ext = elem as Element & { name: string };
+          const gateMatch = ext.name.match(
+            /^DIGITAL:(And|Or|Not|Nor|Nand|Xor|Xnor)(\d*)$/,
+          );
+          if (!gateMatch) continue;
+          const type = gateMatch[1]!;
+          const count = gateMatch[2] ? parseInt(gateMatch[2]!) : 1;
+          if (where.gateType && where.gateType !== type) continue;
+          if (where.inputCount && where.inputCount !== count) continue;
+          matches.push({ index: i, name: ext.name });
+        }
+        for (const m of matches) {
+          const elem = circuit.elements[m.index]!;
+          if (data.x !== undefined) elem.x = data.x;
+          if (data.y !== undefined) elem.y = data.y;
+          if (data.rotation !== undefined) elem.rotation = data.rotation;
+          if (data.gateType !== undefined || data.inputCount !== undefined) {
+            const t = data.gateType ?? "AND";
+            const c =
+              data.gateType === "NOT" ? undefined : (data.inputCount ?? 2);
+            elem.name = c ? `DIGITAL:${t}${c}` : `DIGITAL:${t}`;
+          }
+        }
+        return ok({
+          action: "update",
+          element: "GATE",
+          updated: matches.length,
+          matches: matches.map(({ index, name }) => ({
+            index,
+            data: { name },
+          })),
+        });
+      },
+    );
+    server.registerTool(
+      "delete_gate",
+      {
+        description: "Delete logic gates from the circuit",
+        inputSchema: z.object({
+          where: gateSchema.partial(),
+        }),
+        outputSchema: removeOutputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          openWorldHint: false,
+        },
+      },
+      async ({ where }) => {
+        const circuit = c();
+        const indices: number[] = [];
+        for (let i = circuit.elements.length - 1; i >= 0; i--) {
+          const elem = circuit.elements[i]!;
+          if (elem.type !== ElementType.EXTENSION) continue;
+          const ext = elem as Element & { name: string };
+          const gateMatch = ext.name.match(
+            /^DIGITAL:(And|Or|Not|Nor|Nand|Xor|Xnor)(\d*)$/,
+          );
+          if (!gateMatch) continue;
+          const type = gateMatch[1]!;
+          const count = gateMatch[2] ? parseInt(gateMatch[2]!) : 1;
+          if (where.gateType && where.gateType !== type) continue;
+          if (where.inputCount && where.inputCount !== count) continue;
+          circuit.elements.splice(i, 1);
+          indices.push(i);
+        }
+        return ok({
+          action: "remove",
+          element: "GATE",
+          removed: indices.length,
+          indices: indices.reverse(),
+        });
+      },
+    );
+    server.registerTool(
+      "add_probe",
+      {
+        description: "Add a red logic probe to the circuit",
+        inputSchema: probeSchema,
+        outputSchema: addOutputSchema,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          openWorldHint: false,
+        },
+      },
+      (input) => {
+        const circuit = c();
+        addExtensionElement({
+          circuit,
+          name: "DIGITAL:ProbeR",
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          value: {},
+          data: "",
+          modelName: "ideal",
+        });
+        return ok({
+          action: "add",
+          element: "PROBE",
+          index: circuit.elements.length - 1,
+          data: { name: "DIGITAL:ProbeR" },
+        });
       },
     );
     server.registerTool(
@@ -2032,7 +2219,7 @@ export const handler = createMcpHandler(
   },
   {
     instructions:
-      "URGENT: At the very start of every task, immediately call 'get_agent_behavior_spec' and read the entire behavior spec before using any circuit editing tools. Do not skip this step. Call 'get_docs' only when you need exact reference details. Also call 'tools/list' to discover all available tools — the client may not show all of them otherwise.",
+      "URGENT: At the very start, immediately call 'get_agent_behavior_spec' and read the entire behavior spec before using any circuit editing tools. Do not skip this step. Follow every instruction carefully. Call 'get_docs' only when you need exact reference details. Also call 'tools/list' to discover all available tools — the client may not show all of them otherwise.",
     capabilities: {
       tools: {},
       resources: {},
