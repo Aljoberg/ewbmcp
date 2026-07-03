@@ -2,6 +2,164 @@
 
 This document is the mandatory operational starting point for agents using the EWB MCP. It is not a full API reference. Use `get_docs` only when you need exact tool schemas or file-format details.
 
+# Core Circuit Behavior Upgrade (v2 ADDITION)
+
+The MCP is not only a circuit editor.
+
+It is a **complete circuit generator that MUST always produce:**
+
+- Electrically valid circuits
+- Closed-loop complete circuits
+- Immediately runnable EWB schematics
+- Visually clean and readable layouts
+
+Partial or incomplete circuits are NOT valid final outputs.
+
+---
+
+# Circuit Completion & Quality Requirement (MANDATORY)
+
+## 1. Electrical Validity (HARD REQUIREMENT)
+
+A circuit is ONLY valid if:
+
+- At least one closed loop exists
+- Every voltage source has a return path to its negative terminal
+- No floating or dangling components exist (unless explicitly requested)
+
+Formal rule:
+
+A valid circuit must allow traversal:
+
+Battery(+) → components → Battery(−)
+
+If not satisfied:
+
+- The agent MUST fix the circuit automatically
+- The agent MUST NOT export
+
+---
+
+## 2. Loop Closure Rule
+
+If a circuit is a chain:
+
+Battery → components → open end
+
+Then the agent MUST:
+
+- connect back to Battery(−)
+- or introduce a proper return path
+
+No open chains allowed in final output.
+
+---
+
+## 3. Auto-Ground Inference
+
+If a return path is missing:
+
+- Infer Battery(−) as reference ground
+- Automatically complete return connection
+
+Unless explicitly forbidden by the user.
+
+---
+
+## 4. Schematic Quality Rules
+
+### Layout
+
+- Battery: left side
+- Flow: left → right
+- Return path: bottom or clean loop back left
+- Components aligned in rows for series circuits
+
+### Wiring
+
+- Prefer straight or single-segment wires
+- Avoid crossings
+- Keep wiring minimal and readable
+
+---
+
+## 5. Canonical Circuit Templates
+
+Default builds MUST follow:
+
+### Series DC Circuit
+
+Battery → Ammeter → Resistor → Battery(−)
+
+### RC Circuit
+
+Battery → Resistor → Capacitor → Battery(−)
+
+### Voltage Divider
+
+Battery → R1 → R2 → Battery(−)
+
+If user request is vague, use canonical template.
+
+---
+
+## 6. Ammeter Rules (STRICT)
+
+- Must be in series path
+- Must not break loop integrity
+- Do NOT rotate the ammeter — rotation negates the output. Use pin 1 for the left connection and pin 0 for the right instead.
+- Must always be part of closed loop
+
+---
+
+## 7. Pre-Export Validation (MANDATORY)
+
+Before calling `export_file`, the agent MUST perform:
+
+### A. Connectivity Check
+
+- Confirm at least one closed loop exists
+- Confirm Battery(+) connects to Battery(−)
+
+### B. Completeness Check
+
+- No floating components
+- No open-ended wires
+
+### C. Layout Check
+
+- Left-to-right readability
+- No overlapping components
+- Minimal wire complexity
+
+### D. Instrument Check
+
+- Ammeter correctly placed in series
+- No bypassed measurement devices
+
+If any check fails:
+
+- repair circuit
+- re-validate
+- only then export
+
+---
+
+## 8. Export Rule
+
+Export is ONLY allowed when:
+
+- Electrical validity is satisfied
+- Schematic quality rules are satisfied
+- Pre-export validation passes
+
+If user requests early export:
+
+- automatically fix circuit first
+- then export final version
+
+---
+
 ## Core Workflow
 
 Every session starts by establishing the current circuit state.
@@ -59,11 +217,13 @@ Deleting elements can make existing wire endpoint indices invalid. If you delete
 
 ## Coordinates and Placement
 
-Use `x` and `y` to place components. Existing examples generally place visible components around `x: 1000`, `y: 800` or nearby.
+Use `x` and `y` to place components. Existing examples generally place visible components around `x: 1000`, `y: 800` or nearby - you should usually also place components there.
 
 Practical placement rules:
 
-- Space components generously. EWB parts can be wider than their abstract symbol name suggests.
+- **The workspace is 2000 x 2000 pixels.** That is enormous. Use it.
+- **Space components WAY out.** Put things at least **200 px apart** in x and y. The ammeter is ~150 px wide by itself, so 200 px is the bare minimum when one is involved.
+- Most other components are ~60-80 px, so spacing them 200+ px apart makes the schematic readable instead of a tangled mess.
 - Keep simple left-to-right circuits around the visible workspace center.
 - Use consistent rows and columns so wire segments can be short and readable.
 - Avoid overlapping elements. The MCP does not perform layout collision checks.
@@ -85,7 +245,7 @@ Pin conventions are component-specific. If you are unsure, inspect a known-good 
 
 Known critical case:
 
-- The ammeter's pin `0` is on the right side in the current reference notes. Do not assume pin `0` is left.
+- The ammeter's pin `0` is on the right side at `rotation: 0`, pin `1` on the left. Do NOT rotate the ammeter to flip pins — **rotation negates the output** (current reads negative). Instead, just pick the correct pin index: use **pin 1** for left connections, **pin 0** for right.
 
 ## Multipliers
 
@@ -103,10 +263,15 @@ Supported multiplier values in the current schemas:
 Examples:
 
 - 10 kohm resistor: `resistance: 10`, `resistanceMultiplier: 1000`.
-- 5 V battery: `voltage: 5`, `voltageMultiplier: 1`.
+- 5 V battery: `voltage: 5`, `voltageMultiplier: 1000000`.
 - 100 nF capacitor: `capacitance: 100`, `multiplier: 0.001`.
 
 Do not enter 10 kohm as `resistance: 10000` with `resistanceMultiplier: 1` unless the user explicitly wants the base-unit display. The simulated value may be equivalent, but the schematic display and serialized `ModelUnits` will differ.
+
+Battery note:
+
+- EWB stores battery voltage with a microvolt base. For ordinary volt values, use `voltageMultiplier: 1000000`, which serializes to `ModelUnits` index `2`.
+- The battery schema defaults `voltageMultiplier` to `1000000`; do not override it to `1` for normal volt batteries.
 
 Current limitations:
 
@@ -182,7 +347,7 @@ For a simple generated demo, use this flow:
 1. `new_file`
 2. Add a battery near the left.
 3. Add a resistor to the right of the battery.
-4. Add an ammeter in series if requested.
+4. Add an ammeter in series (keep `rotation: 0`; use **pin 1** for left-side connections, **pin 0** for right).
 5. Add wires between adjacent pins.
 6. Inspect with `find_elements` and `find_wires`.
 7. Export only when the user asks for the `.ewb` or final file.

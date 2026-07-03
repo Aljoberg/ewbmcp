@@ -14,7 +14,7 @@ This is reference documentation. Agents should first call `get_agent_behavior_sp
 
 ### Sample Circuit
 
-If the user asks for a sample/demo circuit, build a simple series circuit with a **battery**, a **resistor**, and an **ammeter**. Don't forget to set the ammeter's rotation so its pins face the right direction for wiring.
+If the user asks for a sample/demo circuit, build a simple series circuit with a **battery**, a **resistor**, and an **ammeter**. Don't forget to set the ammeter's rotation so its pins face the right direction for wiring; `rotation: 180` puts ammeter pin `0` on the left and usually renders cleaner in left-to-right circuits.
 
 ## Tools
 
@@ -96,7 +96,7 @@ All components share these base fields:
 - `x` (number) — Grid X position (increases rightward)
 - `y` (number) — Grid Y position (increases upward; **(0, 0) is bottom-left**)
 
-> The EWB window opens centered at approximately **x: 1000, y: 800**. Place new components near this position so they appear in the visible area. There is plenty of space — some components (like relays, transformers, op-amps) are wide and have many pins, so don't be afraid to space things out generously.
+> The EWB window opens at **x: 0–2000, y: 0–2000** centered around **x: 1000, y: 800**. There is **plenty of room** — space components out generously. Most components are ~60–80 px wide but an ammeter is ~150 px. Put things **at least 200 px apart** in x and y; you have the space and it keeps the schematic readable.
 
 #### resistor
 
@@ -108,11 +108,13 @@ All components share these base fields:
 
 #### battery
 
-| Tool             | Input Fields                                                                 |
-| ---------------- | ---------------------------------------------------------------------------- |
-| `add_battery`    | rotation, x, y, voltage, voltageMultiplier? (1\|1000\|1e6\|0.001, default 1) |
-| `update_battery` | `{ where, data }`                                                            |
-| `delete_battery` | `{ where }`                                                                  |
+| Tool             | Input Fields                                                                   |
+| ---------------- | ------------------------------------------------------------------------------ |
+| `add_battery`    | rotation, x, y, voltage, voltageMultiplier? (1\|1000\|1e6\|0.001, default 1e6) |
+| `update_battery` | `{ where, data }`                                                              |
+| `delete_battery` | `{ where }`                                                                    |
+
+> Battery voltage uses a microvolt base in EWB. For ordinary volt values, use `voltageMultiplier: 1000000`, which serializes to `ModelUnits` index `2`.
 
 #### capacitor
 
@@ -204,21 +206,22 @@ All components share these base fields:
 
 #### ammeter
 
-| Tool             | Input Fields                                    |
-| ---------------- | ----------------------------------------------- |
-| `add_ammeter`    | rotation, x, y, mode? (0=DC \| 1=AC, default 0) |
-| `update_ammeter` | `{ where, data }`                               |
-| `delete_ammeter` | `{ where }`                                     |
+| Tool             | Input Fields                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| `add_ammeter`    | rotation, x, y, resistance? (min 1, default 1), resistanceMultiplier?, mode? (0=DC \| 1=AC, default 0) |
+| `update_ammeter` | `{ where, data }`                                                                                      |
+| `delete_ammeter` | `{ where }`                                                                                            |
 
-> **⚠️ CRITICAL: The ammeter's 0th pin is on the RIGHT side.** Not the left. The right. If you wire pin 0 as if it's on the left, the connection will be wrong. The ammeter display stays readable regardless of rotation, so use `rotation` to orient the pins correctly for your wiring layout. Plan accordingly.
+> **⚠️ CRITICAL: At `rotation: 0`, the ammeter's 0th pin is on the RIGHT side, pin 1 on the LEFT.** Do NOT rotate the ammeter to flip pins — rotation **negates the output** (current reads negative). Instead, just pick the correct pin index: use **pin 1** for the left connection and **pin 0** for the right connection.
+> **Resistance must be >= 1.** A value of 0 causes a divide-by-zero and the circuit simulates as +INF.
 
 #### voltmeter
 
-| Tool               | Input Fields                                    |
-| ------------------ | ----------------------------------------------- |
-| `add_voltmeter`    | rotation, x, y, mode? (0=DC \| 1=AC, default 0) |
-| `update_voltmeter` | `{ where, data }`                               |
-| `delete_voltmeter` | `{ where }`                                     |
+| Tool               | Input Fields                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------ |
+| `add_voltmeter`    | rotation, x, y, resistance? (min 1, default 1), resistanceMultiplier?, mode? (0=DC \| 1=AC, default 0) |
+| `update_voltmeter` | `{ where, data }`                                                                                      |
+| `delete_voltmeter` | `{ where }`                                                                                            |
 
 ---
 
