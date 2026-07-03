@@ -405,7 +405,7 @@ export interface Battery extends Element {
   };
   multipliers: {
     voltage: number;
-  }
+  };
 }
 
 export interface Capacitor extends Element {
@@ -437,12 +437,20 @@ export interface DcCurrentSource extends Element {
 export interface Ammeter extends Element {
   data: {
     mode: number;
+    resistance: number;
+  };
+  multipliers: {
+    resistance: number;
   };
 }
 
 export interface Voltmeter extends Element {
   data: {
     mode: number;
+    resistance: number;
+  };
+  multipliers: {
+    resistance: number;
   };
 }
 

@@ -45,7 +45,7 @@ export const multiplierSchema = z.union([
 ]);
 
 export const resistorSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   resistance: z.number(),
@@ -53,15 +53,15 @@ export const resistorSchema = z.object({
 });
 
 export const batterySchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   voltage: z.number(),
-  voltageMultiplier: multiplierSchema.optional().default(1),
+  voltageMultiplier: multiplierSchema.optional().default(1000000),
 });
 
 export const capacitorSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   capacitance: z.number(),
@@ -69,7 +69,7 @@ export const capacitorSchema = z.object({
 });
 
 export const inductorSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   inductance: z.number(),
@@ -77,7 +77,7 @@ export const inductorSchema = z.object({
 });
 
 export const acVoltageSourceSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   peakVoltage: z.number(),
@@ -86,14 +86,14 @@ export const acVoltageSourceSchema = z.object({
 });
 
 export const dcCurrentSourceSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   current: z.number(),
 });
 
 export const acCurrentSourceSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   peakCurrent: z.number(),
@@ -102,7 +102,7 @@ export const acCurrentSourceSchema = z.object({
 });
 
 export const fuseSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   rating: z.number(),
@@ -110,7 +110,7 @@ export const fuseSchema = z.object({
 });
 
 export const relaySchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   pickupVoltage: z.number(),
@@ -120,7 +120,7 @@ export const relaySchema = z.object({
 });
 
 export const switchSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   initialState: z
@@ -130,7 +130,7 @@ export const switchSchema = z.object({
 });
 
 export const timeDelaySwitchSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   tOn: z.number(),
@@ -140,7 +140,7 @@ export const timeDelaySwitchSchema = z.object({
 });
 
 export const voltageControlledSwitchSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   rOn: z.number(),
@@ -149,7 +149,7 @@ export const voltageControlledSwitchSchema = z.object({
 });
 
 export const currentControlledSwitchSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
   rOn: z.number(),
@@ -158,23 +158,27 @@ export const currentControlledSwitchSchema = z.object({
 });
 
 export const ammeterSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
+  resistance: z.number().min(1).optional().default(1),
   mode: z
     .union([z.literal(0), z.literal(1)])
     .optional()
     .default(0),
+  resistanceMultiplier: multiplierSchema.optional().default(0.001),
 });
 
 export const voltmeterSchema = z.object({
-  rotation: rotationSchema,
+  rotation: rotationSchema.optional().default(0),
   x: z.number(),
   y: z.number(),
+  resistance: z.number().min(1).optional().default(1),
   mode: z
     .union([z.literal(0), z.literal(1)])
     .optional()
     .default(0),
+  resistanceMultiplier: multiplierSchema.optional().default(0.001),
 });
 
 // output schemas

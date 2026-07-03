@@ -323,8 +323,8 @@ function toArray<T>(v: T | T[] | undefined): T[] {
 const ROTATION_TO_INDEX = new Map<number, number>([
   [0, 0],
   [90, 1],
-  [180, 2],
-  [270, 3],
+  [180, 6],
+  [270, 7],
 ]);
 const INDEX_TO_ROTATION = [0, 90, 180, 270] as const;
 const MULTIPLIERS = [1, 1000, 1000000, 0.001] as const;
@@ -449,10 +449,10 @@ export function deserialize(contents: Uint8Array) {
               data = { current: v[0] } as DcCurrentSource["data"];
               break;
             case PartNum.AMMETER:
-              data = { mode: v[0] } as Ammeter["data"];
+              data = { mode: v[1], resistance: v[0] } as Ammeter["data"];
               break;
             case PartNum.VOLTMETER:
-              data = { mode: v[0] } as Voltmeter["data"];
+              data = { mode: v[1], resistance: v[0] } as Voltmeter["data"];
               break;
             case PartNum.FUSE:
               data = { rating: v[0], responseTime: v[1] ?? 0 } as Fuse["data"];
@@ -1059,6 +1059,11 @@ export const handler = createMcpHandler(
         description:
           "MANDATORY STARTUP TOOL: call this first in every new task and read the entire EWB MCP agent behavior spec before using any circuit editing tools.",
         outputSchema: z.object({ text: z.string(), mimeType: z.string() }),
+        annotations: {
+          destructiveHint: false,
+          readOnlyHint: true,
+          openWorldHint: false,
+        },
       },
       async () => {
         return ok({
@@ -1073,6 +1078,11 @@ export const handler = createMcpHandler(
         description:
           "Optional reference documentation for exact EWB MCP tool schemas and file-format details. Use after get_agent_behavior_spec only when needed.",
         outputSchema: z.object({ text: z.string(), mimeType: z.string() }),
+        annotations: {
+          destructiveHint: false,
+          readOnlyHint: true,
+          openWorldHint: false,
+        },
       },
       async () => {
         return ok({
@@ -1589,7 +1599,8 @@ export const handler = createMcpHandler(
       "AMMETER",
       ammeterSchema,
       {
-        description: "Add an ammeter to the circuit (mode: 0=DC, 1=AC)",
+        description:
+          "Add an ammeter to the circuit (mode: 0=DC, 1=AC, resistance: minimum of 1)",
       },
       {
         add: (input, { add }) =>
@@ -1597,7 +1608,8 @@ export const handler = createMcpHandler(
             rotation: input.rotation,
             x: input.x,
             y: input.y,
-            data: { mode: input.mode },
+            data: { resistance: input.resistance, mode: input.mode },
+            _modelUnits: [multiplierIndex(input.resistanceMultiplier)],
           }),
       },
     );
@@ -1606,7 +1618,8 @@ export const handler = createMcpHandler(
       "VOLTMETER",
       voltmeterSchema,
       {
-        description: "Add a voltmeter to the circuit (mode: 0=DC, 1=AC)",
+        description:
+          "Add a voltmeter to the circuit (mode: 0=DC, 1=AC, resistance: minimum of 1)",
       },
       {
         add: (input, { add }) =>
@@ -1614,7 +1627,8 @@ export const handler = createMcpHandler(
             rotation: input.rotation,
             x: input.x,
             y: input.y,
-            data: { mode: input.mode },
+            data: { resistance: input.resistance, mode: input.mode },
+            _modelUnits: [multiplierIndex(input.resistanceMultiplier)],
           }),
       },
     );
