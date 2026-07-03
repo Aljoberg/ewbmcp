@@ -6,7 +6,7 @@ This MCP server provides read/write access to Electronics Workbench (EWB) circui
 
 ### Session Workflow
 
-**IMPORTANT: Read this entire document immediately before doing anything else. Also call `tools/list` to discover all available tools — the full set of tools may not be visible otherwise.**
+This is reference documentation. Agents should first call `get_agent_behavior_spec` and read the behavior spec. Use this document only when exact schemas, tool fields, or file-format details are needed.
 
 1. **Start** — Call `new_file` to create a blank circuit, or `load_file` with raw .ewb contents to load an existing one.
 2. **Operate** — Use any of the element/wire tools (add, update, delete, find) to inspect and modify the circuit.
@@ -100,27 +100,27 @@ All components share these base fields:
 
 #### resistor
 
-| Tool              | Input Fields                                                                     | Notes                          |
-| ----------------- | -------------------------------------------------------------------------------- | ------------------------------ |
-| `add_resistor`    | rotation, x, y, resistance, resistanceMultiplier? (1\|1000\|1e6\|1e9, default 1) | Also sets TC1=0, TC2=0, Tnom=5 |
-| `update_resistor` | `{ where: Partial<input>, data: Partial<input> }`                                | Matches by any field           |
-| `delete_resistor` | `{ where: Partial<input> }`                                                      | Deletes matching elements      |
+| Tool              | Input Fields                                                                       | Notes                          |
+| ----------------- | ---------------------------------------------------------------------------------- | ------------------------------ |
+| `add_resistor`    | rotation, x, y, resistance, resistanceMultiplier? (1\|1000\|1e6\|0.001, default 1) | Also sets TC1=0, TC2=0, Tnom=5 |
+| `update_resistor` | `{ where: Partial<input>, data: Partial<input> }`                                  | Matches by any field           |
+| `delete_resistor` | `{ where: Partial<input> }`                                                        | Deletes matching elements      |
 
 #### battery
 
-| Tool             | Input Fields                                                               |
-| ---------------- | -------------------------------------------------------------------------- |
-| `add_battery`    | rotation, x, y, voltage, voltageMultiplier? (1\|1000\|1e6\|1e9, default 1) |
-| `update_battery` | `{ where, data }`                                                          |
-| `delete_battery` | `{ where }`                                                                |
+| Tool             | Input Fields                                                                 |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `add_battery`    | rotation, x, y, voltage, voltageMultiplier? (1\|1000\|1e6\|0.001, default 1) |
+| `update_battery` | `{ where, data }`                                                            |
+| `delete_battery` | `{ where }`                                                                  |
 
 #### capacitor
 
-| Tool               | Input Fields                                                            |
-| ------------------ | ----------------------------------------------------------------------- |
-| `add_capacitor`    | rotation, x, y, capacitance, multiplier? (1\|1000\|1e6\|1e9, default 1) |
-| `update_capacitor` | `{ where, data }`                                                       |
-| `delete_capacitor` | `{ where }`                                                             |
+| Tool               | Input Fields                                                              |
+| ------------------ | ------------------------------------------------------------------------- |
+| `add_capacitor`    | rotation, x, y, capacitance, multiplier? (1\|1000\|1e6\|0.001, default 1) |
+| `update_capacitor` | `{ where, data }`                                                         |
+| `delete_capacitor` | `{ where }`                                                               |
 
 #### inductor
 

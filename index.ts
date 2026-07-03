@@ -320,7 +320,26 @@ function toArray<T>(v: T | T[] | undefined): T[] {
   return Array.isArray(v) ? v : [v];
 }
 
-const MULTIPLIERS = [0, 1000, 1000000, 0.001];
+const ROTATION_TO_INDEX = new Map<number, number>([
+  [0, 0],
+  [90, 1],
+  [180, 2],
+  [270, 3],
+]);
+const INDEX_TO_ROTATION = [0, 90, 180, 270] as const;
+const MULTIPLIERS = [1, 1000, 1000000, 0.001] as const;
+
+function rotationFromEwbIndex(index: number) {
+  return INDEX_TO_ROTATION[index as 0 | 1 | 2 | 3] ?? 0;
+}
+
+function rotationToEwbIndex(rotation: number) {
+  const index = ROTATION_TO_INDEX.get(rotation);
+  if (index === undefined) {
+    throw new Error(`Unsupported rotation: ${rotation}`);
+  }
+  return index;
+}
 
 export function deserialize(contents: Uint8Array) {
   const parsed = parse(contents) as unknown as { Project_5_1: Project51 }; // fuck you typescript
@@ -497,7 +516,7 @@ export function deserialize(contents: Uint8Array) {
 
         const obj: Element = {
           name: PartNum[pn]!,
-          rotation: comp.Position[0]!,
+          rotation: rotationFromEwbIndex(comp.Position[0]!),
           x: comp.Position[1]!,
           y: comp.Position[2]!,
           refId: comp.Common.RefID,
@@ -518,7 +537,7 @@ export function deserialize(contents: Uint8Array) {
 
         changedElements.push({
           name: comp.Name,
-          rotation: comp.Position[0]!,
+          rotation: rotationFromEwbIndex(comp.Position[0]!),
           x: comp.Position[1]!,
           y: comp.Position[2]!,
           refId: comp.Common.RefID,
@@ -536,7 +555,7 @@ export function deserialize(contents: Uint8Array) {
 
         changedElements.push({
           name: "Instrument",
-          rotation: inst.Pos[0]!,
+          rotation: rotationFromEwbIndex(inst.Pos[0]!),
           x: inst.Pos[1]!,
           y: inst.Pos[2]!,
           refId: undefined,
@@ -597,7 +616,10 @@ export function serialize({ elements, wires }: DeserializedCircuit) {
         const pn = PartNum[elem.name as keyof typeof PartNum];
         emitBlock(elem.type, 6, () => {
           emit(`PartNum i ${pn}`, 8);
-          emit(`Position i:3 ${elem.rotation} ${elem.x} ${elem.y}`, 8);
+          emit(
+            `Position i:3 ${rotationToEwbIndex(elem.rotation)} ${elem.x} ${elem.y}`,
+            8,
+          );
           if (elem._value)
             emit(`Value r:${elem._value.length} ${elem._value.join(" ")}`, 8);
           emit(
@@ -622,7 +644,10 @@ export function serialize({ elements, wires }: DeserializedCircuit) {
       } else if (elem.type === ElementType.EXTENSION) {
         emitBlock(elem.type, 6, () => {
           emit(`Name R ${quote(elem.name)}`, 8);
-          emit(`Position i:3 ${elem.rotation} ${elem.x} ${elem.y}`, 8);
+          emit(
+            `Position i:3 ${rotationToEwbIndex(elem.rotation)} ${elem.x} ${elem.y}`,
+            8,
+          );
           if (elem._value && elem._value.length > 0) {
             emit(`Value r:${elem._value.length} ${elem._value.join(" ")}`, 8);
           }
@@ -641,7 +666,10 @@ export function serialize({ elements, wires }: DeserializedCircuit) {
       } else if (elem.type === ElementType.INSTRUMENT) {
         emitBlock("Instrument", 6, () => {
           emit(`PartNum i 6`, 8);
-          emit(`Pos i:3 ${elem.rotation} ${elem.x} ${elem.y}`, 8);
+          emit(
+            `Pos i:3 ${rotationToEwbIndex(elem.rotation)} ${elem.x} ${elem.y}`,
+            8,
+          );
         });
       }
     }
@@ -1014,39 +1042,36 @@ function addWire({
 }
 
 function multiplierIndex(mult: number): number {
-  return mult >= 0.001 ? 3 : mult >= 1000000 ? 2 : mult >= 1000 ? 1 : 0;
+  const index = MULTIPLIERS.findIndex((m) => m === mult);
+  if (index === -1) {
+    throw new Error(`Unsupported multiplier: ${mult}`);
+  }
+  return index;
 }
 let circuit: DeserializedCircuit | null = null;
 
 export const handler = createMcpHandler(
   (server) => {
     console.log("mreowwww :3");
-    // server.registerResource(
-    //   "mcp-docs",
-    //   "ewb://docs/mcp",
-    //   {
-    //     title: "MCP Documentation",
-    //     mimeType: "text/markdown",
-    //     description: "MCP server documentation for EWB circuit editor",
-    //     annotations: { audience: ["assistant"], priority: 1 },
-    //   },
-    //   async () => ({
-    //     contents: [
-    //       {
-    //         uri: "ewb://docs/mcp",
-    //         text: await Bun.file("./MCP_DOCUMENTATION.md").text(),
-    //         mimeType: "text/markdown",
-    //       },
-    //     ],
-    //   }),
-    // );
-    // server.registerTool("list_resources", { description: "List all available resources" }, async () => {
-    //   return ok([1, 2, 3])
-    // });
+    server.registerTool(
+      "get_agent_behavior_spec",
+      {
+        description:
+          "MANDATORY STARTUP TOOL: call this first in every new task and read the entire EWB MCP agent behavior spec before using any circuit editing tools.",
+        outputSchema: z.object({ text: z.string(), mimeType: z.string() }),
+      },
+      async () => {
+        return ok({
+          text: await Bun.file("./AGENT_BEHAVIOR_SPEC.md").text(),
+          mimeType: "text/markdown",
+        });
+      },
+    );
     server.registerTool(
       "get_docs",
       {
-        description: "Get documentation",
+        description:
+          "Optional reference documentation for exact EWB MCP tool schemas and file-format details. Use after get_agent_behavior_spec only when needed.",
         outputSchema: z.object({ text: z.string(), mimeType: z.string() }),
       },
       async () => {
@@ -1593,26 +1618,6 @@ export const handler = createMcpHandler(
           }),
       },
     );
-    // const template = new ResourceTemplate("file:///ewb/{fileName}", {
-    //   list: undefined /* TODO */,
-    // });
-    // server.registerResource(
-    //   "files",
-    //   template,
-    //   {
-    //     description: "EWB file resource",
-    //   },
-    //   (uri, variables) => {
-    //     return {
-    //       contents: [
-    //         {
-    //           uri: `file:///ewb/${variables.fileName}`,
-    //           text: "Not supported yet :P",
-    //         },
-    //       ],
-    //     };
-    //   },
-    // );
     server.registerTool(
       "export_file",
       {
@@ -1860,7 +1865,7 @@ export const handler = createMcpHandler(
   },
   {
     instructions:
-      "URGENT: At the very start of the conversation, immediately call 'get_docs' and read the entire documentation before doing anything else. Do not skip this step. Also call 'tools/list' to discover all available tools — the client may not show all of them otherwise.",
+      "URGENT: At the very start of every task, immediately call 'get_agent_behavior_spec' and read the entire behavior spec before using any circuit editing tools. Do not skip this step. Call 'get_docs' only when you need exact reference details. Also call 'tools/list' to discover all available tools — the client may not show all of them otherwise.",
     capabilities: {
       tools: {},
       resources: {},
