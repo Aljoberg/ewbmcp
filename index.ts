@@ -4,28 +4,37 @@ import {
   type AcVoltageSource,
   type Ammeter,
   type Battery,
+  type Bulb,
   type Capacitor,
   type ChangedWire,
   type Comp,
   type ConfigBlock,
   type ConfigValue,
+  type Connector,
   type CurrentControlledSwitch,
   type DcCurrentSource,
   type DeserializedCircuit,
+  type Diode,
   type DigitalNode,
   type Element,
   type Elements,
   type ExtComp,
   type Fuse,
+  type Ground,
   type Inductor,
   type Instrument,
+  type Led,
+  type NpnTransistor,
+  type PnpTransistor,
   type Project51,
   type Relay,
   type Resistor,
   type Switch,
   type TimeDelaySwitch,
+  type Transformer,
   type VoltageControlledSwitch,
   type Voltmeter,
+  type ZenerDiode,
 } from "./types";
 import {
   ResourceTemplate,
@@ -55,23 +64,32 @@ import {
   addOutputSchema,
   ammeterSchema,
   batterySchema,
+  bulbSchema,
   capacitorSchema,
+  connectorSchema,
   currentControlledSwitchSchema,
   dcCurrentSourceSchema,
+  diodeSchema,
   elementDataOutputSchema,
   findOutputSchema,
   fuseSchema,
+  groundSchema,
   inductorSchema,
+  ledSchema,
   loadFileSchema,
+  npnTransistorSchema,
+  pnpTransistorSchema,
   relaySchema,
   removeOutputSchema,
   resistorSchema,
   switchSchema,
   timeDelaySwitchSchema,
+  transformerSchema,
   updateOutputSchema,
   voltageControlledSwitchSchema,
   voltmeterSchema,
   wireSchema,
+  zenerDiodeSchema,
 } from "./schemas";
 import { decodeFile, encodeFile } from "./ewb";
 import { createMcpHandler } from "mcp-handler";
@@ -1629,6 +1647,141 @@ export const handler = createMcpHandler(
             y: input.y,
             data: { resistance: input.resistance, mode: input.mode },
             _modelUnits: [multiplierIndex(input.resistanceMultiplier)],
+          }),
+      },
+    );
+    CUD(
+      "ground",
+      "GROUND",
+      groundSchema,
+      { description: "Add a ground reference to the circuit" },
+      {
+        add: (input, { add }) =>
+          add<Ground>({
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            data: {},
+          }),
+      },
+    );
+    CUD(
+      "connector",
+      "CONNECTOR",
+      connectorSchema,
+      { description: "Add a connector (junction point) to the circuit" },
+      {
+        add: (input, { add }) =>
+          add<Connector>({
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            data: {},
+          }),
+      },
+    );
+    CUD(
+      "diode",
+      "DIODE",
+      diodeSchema,
+      { description: "Add a diode to the circuit" },
+      {
+        add: (input, { add }) =>
+          add<Diode>({
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            data: {},
+          }),
+      },
+    );
+    CUD(
+      "zener_diode",
+      "ZENER_DIODE",
+      zenerDiodeSchema,
+      { description: "Add a zener diode to the circuit" },
+      {
+        add: (input, { add }) =>
+          add<ZenerDiode>({
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            data: {},
+          }),
+      },
+    );
+    CUD(
+      "led",
+      "LED",
+      ledSchema,
+      { description: "Add an LED to the circuit" },
+      {
+        add: (input, { add }) =>
+          add<Led>({
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            data: {},
+          }),
+      },
+    );
+    CUD(
+      "npn_transistor",
+      "NPN_TRANSISTOR",
+      npnTransistorSchema,
+      { description: "Add an NPN transistor to the circuit" },
+      {
+        add: (input, { add }) =>
+          add<NpnTransistor>({
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            data: {},
+          }),
+      },
+    );
+    CUD(
+      "pnp_transistor",
+      "PNP_TRANSISTOR",
+      pnpTransistorSchema,
+      { description: "Add a PNP transistor to the circuit" },
+      {
+        add: (input, { add }) =>
+          add<PnpTransistor>({
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            data: {},
+          }),
+      },
+    );
+    CUD(
+      "transformer",
+      "TRANSFORMER",
+      transformerSchema,
+      { description: "Add a transformer to the circuit" },
+      {
+        add: (input, { add }) =>
+          add<Transformer>({
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            data: {},
+          }),
+      },
+    );
+    CUD(
+      "bulb",
+      "BULB",
+      bulbSchema,
+      { description: "Add a bulb (lamp) to the circuit" },
+      {
+        add: (input, { add }) =>
+          add<Bulb>({
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            data: { maxPower: input.maxPower, maxVoltage: input.maxVoltage },
           }),
       },
     );

@@ -509,6 +509,37 @@ export interface Connector extends Element {
   data: Record<string, never>;
 }
 
+export interface Diode extends Element {
+  data: Record<string, never>;
+}
+
+export interface NpnTransistor extends Element {
+  data: Record<string, never>;
+}
+
+export interface PnpTransistor extends Element {
+  data: Record<string, never>;
+}
+
+export interface Transformer extends Element {
+  data: Record<string, never>;
+}
+
+export interface ZenerDiode extends Element {
+  data: Record<string, never>;
+}
+
+export interface Led extends Element {
+  data: Record<string, never>;
+}
+
+export interface Bulb extends Element {
+  data: {
+    maxPower: number;
+    maxVoltage: number;
+  };
+}
+
 export interface DigitalNode extends Element {
   data: {
     m_tptrElem: string;

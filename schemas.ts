@@ -181,6 +181,62 @@ export const voltmeterSchema = z.object({
   resistanceMultiplier: multiplierSchema.optional().default(0.001),
 });
 
+export const groundSchema = z.object({
+  rotation: rotationSchema.optional().default(0),
+  x: z.number(),
+  y: z.number(),
+});
+
+export const connectorSchema = z.object({
+  rotation: rotationSchema.optional().default(0),
+  x: z.number(),
+  y: z.number(),
+});
+
+export const diodeSchema = z.object({
+  rotation: rotationSchema.optional().default(0),
+  x: z.number(),
+  y: z.number(),
+});
+
+export const npnTransistorSchema = z.object({
+  rotation: rotationSchema.optional().default(0),
+  x: z.number(),
+  y: z.number(),
+});
+
+export const pnpTransistorSchema = z.object({
+  rotation: rotationSchema.optional().default(0),
+  x: z.number(),
+  y: z.number(),
+});
+
+export const transformerSchema = z.object({
+  rotation: rotationSchema.optional().default(0),
+  x: z.number(),
+  y: z.number(),
+});
+
+export const zenerDiodeSchema = z.object({
+  rotation: rotationSchema.optional().default(0),
+  x: z.number(),
+  y: z.number(),
+});
+
+export const ledSchema = z.object({
+  rotation: rotationSchema.optional().default(0),
+  x: z.number(),
+  y: z.number(),
+});
+
+export const bulbSchema = z.object({
+  rotation: rotationSchema.optional().default(0),
+  x: z.number(),
+  y: z.number(),
+  maxPower: z.number(),
+  maxVoltage: z.number(),
+});
+
 // output schemas
 
 export const addOutputSchema = z.object({

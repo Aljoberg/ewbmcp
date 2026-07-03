@@ -298,6 +298,15 @@ Use `add_<type>` to create supported base components:
 - `add_current_controlled_switch`
 - `add_ammeter`
 - `add_voltmeter`
+- `add_ground`
+- `add_connector`
+- `add_diode`
+- `add_zener_diode`
+- `add_led`
+- `add_npn_transistor`
+- `add_pnp_transistor`
+- `add_transformer`
+- `add_bulb`
 
 Use `find_elements` before bulk updates or deletes. `update_*` and `delete_*` match every element satisfying `where`, not just the first match.
 

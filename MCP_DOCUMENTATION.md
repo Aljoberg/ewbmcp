@@ -223,6 +223,78 @@ All components share these base fields:
 | `update_voltmeter` | `{ where, data }`                                                                                      |
 | `delete_voltmeter` | `{ where }`                                                                                            |
 
+#### ground
+
+| Tool            | Input Fields      |
+| --------------- | ----------------- |
+| `add_ground`    | rotation, x, y    |
+| `update_ground` | `{ where, data }` |
+| `delete_ground` | `{ where }`       |
+
+#### connector
+
+| Tool               | Input Fields      |
+| ------------------ | ----------------- |
+| `add_connector`    | rotation, x, y    |
+| `update_connector` | `{ where, data }` |
+| `delete_connector` | `{ where }`       |
+
+#### diode
+
+| Tool           | Input Fields      |
+| -------------- | ----------------- |
+| `add_diode`    | rotation, x, y    |
+| `update_diode` | `{ where, data }` |
+| `delete_diode` | `{ where }`       |
+
+#### zener_diode
+
+| Tool                 | Input Fields      |
+| -------------------- | ----------------- |
+| `add_zener_diode`    | rotation, x, y    |
+| `update_zener_diode` | `{ where, data }` |
+| `delete_zener_diode` | `{ where }`       |
+
+#### led
+
+| Tool         | Input Fields      |
+| ------------ | ----------------- |
+| `add_led`    | rotation, x, y    |
+| `update_led` | `{ where, data }` |
+| `delete_led` | `{ where }`       |
+
+#### npn_transistor
+
+| Tool                    | Input Fields      |
+| ----------------------- | ----------------- |
+| `add_npn_transistor`    | rotation, x, y    |
+| `update_npn_transistor` | `{ where, data }` |
+| `delete_npn_transistor` | `{ where }`       |
+
+#### pnp_transistor
+
+| Tool                    | Input Fields      |
+| ----------------------- | ----------------- |
+| `add_pnp_transistor`    | rotation, x, y    |
+| `update_pnp_transistor` | `{ where, data }` |
+| `delete_pnp_transistor` | `{ where }`       |
+
+#### transformer
+
+| Tool                 | Input Fields      |
+| -------------------- | ----------------- |
+| `add_transformer`    | rotation, x, y    |
+| `update_transformer` | `{ where, data }` |
+| `delete_transformer` | `{ where }`       |
+
+#### bulb
+
+| Tool          | Input Fields                         |
+| ------------- | ------------------------------------ |
+| `add_bulb`    | rotation, x, y, maxPower, maxVoltage |
+| `update_bulb` | `{ where, data }`                    |
+| `delete_bulb` | `{ where }`                          |
+
 ---
 
 ### CUD Output Schemas
@@ -378,13 +450,13 @@ Project_5_1 {
 | 9     | CONNECTOR                 | —                                                      |
 | 10    | DC_CURRENT_SOURCE         | current                                                |
 | 11    | PNP_TRANSISTOR            | —                                                      |
-| 12    | AMMETER                   | mode (0=DC, 1=AC)                                      |
-| 13    | VOLTMETER                 | mode (0=DC, 1=AC)                                      |
+| 12    | AMMETER                   | resistance, mode (0=DC, 1=AC)                          |
+| 13    | VOLTMETER                 | resistance, mode (0=DC, 1=AC)                          |
 | 14    | TRANSFORMER               | —                                                      |
 | 15    | OPAMP                     | —                                                      |
 | 16    | ZENER_DIODE               | —                                                      |
 | 17    | LED                       | —                                                      |
-| 18    | BULB                      | —                                                      |
+| 18    | BULB                      | maxPower, maxVoltage                                   |
 | 19    | FUSE                      | rating, responseTime                                   |
 | 20    | RELAY                     | pickupVoltage, dropoutVoltage, pickupTime, dropoutTime |
 | 21    | TIME_DELAY_SWITCH         | tOn, tOff, delayOn, delayOff                           |
