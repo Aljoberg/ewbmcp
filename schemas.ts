@@ -264,6 +264,15 @@ export const probeSchema = z.object({
   y: z.number(),
 });
 
+export const vccSchema = z.object({
+  rotation: z
+    .union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)])
+    .optional()
+    .default(0),
+  x: z.number(),
+  y: z.number(),
+});
+
 // output schemas
 
 export const addOutputSchema = z.object({

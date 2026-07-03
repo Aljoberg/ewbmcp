@@ -83,6 +83,7 @@ import {
   pnpTransistorSchema,
   probeSchema,
   relaySchema,
+  vccSchema,
   removeOutputSchema,
   resistorSchema,
   switchSchema,
@@ -1667,7 +1668,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
-            _value: [ 0 ],
+            _value: [0],
           }),
       },
     );
@@ -1683,7 +1684,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
-            _value: [ 0 ]
+            _value: [0],
           }),
       },
     );
@@ -1699,7 +1700,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
-            _value: [ 0 ]
+            _value: [0],
           }),
       },
     );
@@ -1715,7 +1716,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
-            _value: [ 0 ]
+            _value: [0],
           }),
       },
     );
@@ -1731,7 +1732,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
-            _value: [ 0 ]
+            _value: [0],
           }),
       },
     );
@@ -1747,7 +1748,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
-            _value: [ 0 ]
+            _value: [0],
           }),
       },
     );
@@ -1763,7 +1764,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
-            _value: [ 0 ]
+            _value: [0],
           }),
       },
     );
@@ -1779,7 +1780,7 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: {},
-            _value: [ 0 ]
+            _value: [0],
           }),
       },
     );
@@ -1798,33 +1799,31 @@ export const handler = createMcpHandler(
           }),
       },
     );
-    function addGate(
-      rotation: number,
-      x: number,
-      y: number,
-      gateType: string,
-      inputCount: number,
-    ) {
-      const circuit = c();
-      const name =
-        gateType === "NOT" ? "DIGITAL:Not" : `DIGITAL:${gateType[0]!.toUpperCase() + gateType.slice(1).toLowerCase()}${inputCount}`;
-      addExtensionElement({
-        circuit,
-        name,
-        rotation,
-        x,
-        y,
-        value: {},
-        data: "",
-        modelName: "ideal",
-      });
-      return ok({
-        action: "add",
-        element: `${gateType}_GATE`,
-        index: circuit.elements.length - 1,
-        data: { name, gateType, inputCount },
-      });
+    function gateMatches(elem: Element, where: Record<string, unknown>) {
+      if (where.gateType === undefined && where.inputCount === undefined) {
+        return Object.entries(where).every(
+          ([k, v]) =>
+            (elem as Record<string, unknown>)[k] === v || elem.data[k] === v,
+        );
+      }
+      const gateMatch = elem.name.match(
+        /^DIGITAL:(And|Or|Not|Nor|Nand|Xor|Xnor)(\d*)$/i,
+      );
+      if (!gateMatch) return false;
+      const type = gateMatch[1]!;
+      const count = gateMatch[2] ? parseInt(gateMatch[2]!) : 1;
+      if (where.gateType !== undefined && where.gateType !== type) return false;
+      if (where.inputCount !== undefined && where.inputCount !== count)
+        return false;
+      return Object.entries(where).every(
+        ([k, v]) =>
+          k === "gateType" ||
+          k === "inputCount" ||
+          (elem as Record<string, unknown>)[k] === v ||
+          elem.data[k] === v,
+      );
     }
+
     server.registerTool(
       "add_gate",
       {
@@ -1837,14 +1836,33 @@ export const handler = createMcpHandler(
           openWorldHint: false,
         },
       },
-      (input) =>
-        addGate(
-          input.rotation,
-          input.x,
-          input.y,
-          input.gateType,
-          input.inputCount,
-        ),
+      (input) => {
+        const circuit = c();
+        const name =
+          input.gateType === "NOT"
+            ? "DIGITAL:Not"
+            : `DIGITAL:${input.gateType[0]!.toUpperCase() + input.gateType.slice(1).toLowerCase()}${input.inputCount}`;
+        addExtensionElement({
+          circuit,
+          name,
+          rotation: input.rotation,
+          x: input.x,
+          y: input.y,
+          value: {},
+          data: "",
+          modelName: "ideal",
+        });
+        return ok({
+          action: "add",
+          element: `${input.gateType}_GATE`,
+          index: circuit.elements.length - 1,
+          data: {
+            name,
+            gateType: input.gateType,
+            inputCount: input.inputCount,
+          },
+        });
+      },
     );
     server.registerTool(
       "update_gate",
@@ -1863,39 +1881,30 @@ export const handler = createMcpHandler(
       },
       async ({ where, data }) => {
         const circuit = c();
-        const matches: { index: number; name: string }[] = [];
+        const matches: { index: number; elem: Element }[] = [];
         for (const [i, elem] of circuit.elements.entries()) {
           if (elem.type !== ElementType.EXTENSION) continue;
-          const ext = elem as Element & { name: string };
-          const gateMatch = ext.name.match(
-            /^DIGITAL:(And|Or|Not|Nor|Nand|Xor|Xnor)(\d*)$/,
-          );
-          if (!gateMatch) continue;
-          const type = gateMatch[1]!;
-          const count = gateMatch[2] ? parseInt(gateMatch[2]!) : 1;
-          if (where.gateType && where.gateType !== type) continue;
-          if (where.inputCount && where.inputCount !== count) continue;
-          matches.push({ index: i, name: ext.name });
+          if (!gateMatches(elem, where as Record<string, unknown>)) continue;
+          matches.push({ index: i, elem });
         }
         for (const m of matches) {
-          const elem = circuit.elements[m.index]!;
-          if (data.x !== undefined) elem.x = data.x;
-          if (data.y !== undefined) elem.y = data.y;
-          if (data.rotation !== undefined) elem.rotation = data.rotation;
           if (data.gateType !== undefined || data.inputCount !== undefined) {
             const t = data.gateType ?? "AND";
             const c =
               data.gateType === "NOT" ? undefined : (data.inputCount ?? 2);
-            elem.name = c ? `DIGITAL:${t}${c}` : `DIGITAL:${t}`;
+            m.elem.name = c ? `DIGITAL:${t}${c}` : `DIGITAL:${t}`;
           }
+          Object.assign(m.elem, data);
         }
         return ok({
           action: "update",
           element: "GATE",
           updated: matches.length,
-          matches: matches.map(({ index, name }) => ({
+          matches: matches.map(({ index, elem }) => ({
             index,
-            data: { name },
+            data: Object.fromEntries(
+              Object.entries(elem).filter(([k]) => !k.startsWith("_")),
+            ),
           })),
         });
       },
@@ -1917,59 +1926,74 @@ export const handler = createMcpHandler(
       async ({ where }) => {
         const circuit = c();
         const indices: number[] = [];
-        for (let i = circuit.elements.length - 1; i >= 0; i--) {
-          const elem = circuit.elements[i]!;
+        for (const [i, elem] of circuit.elements.entries()) {
           if (elem.type !== ElementType.EXTENSION) continue;
-          const ext = elem as Element & { name: string };
-          const gateMatch = ext.name.match(
-            /^DIGITAL:(And|Or|Not|Nor|Nand|Xor|Xnor)(\d*)$/,
-          );
-          if (!gateMatch) continue;
-          const type = gateMatch[1]!;
-          const count = gateMatch[2] ? parseInt(gateMatch[2]!) : 1;
-          if (where.gateType && where.gateType !== type) continue;
-          if (where.inputCount && where.inputCount !== count) continue;
-          circuit.elements.splice(i, 1);
+          if (!gateMatches(elem, where as Record<string, unknown>)) continue;
           indices.push(i);
+        }
+        for (let i = circuit.elements.length - 1; i >= 0; i--) {
+          if (indices.includes(i)) circuit.elements.splice(i, 1);
         }
         return ok({
           action: "remove",
           element: "GATE",
           removed: indices.length,
-          indices: indices.reverse(),
+          indices: indices.sort((a, b) => a - b),
         });
       },
     );
-    server.registerTool(
-      "add_probe",
+    CUD(
+      "probe",
+      "DIGITAL:ProbeR",
+      probeSchema,
+      { description: "Add a red logic probe to the circuit" },
       {
-        description: "Add a red logic probe to the circuit",
-        inputSchema: probeSchema,
-        outputSchema: addOutputSchema,
-        annotations: {
-          readOnlyHint: false,
-          destructiveHint: false,
-          openWorldHint: false,
+        add: (input, _ctx) => {
+          const circuit = c();
+          addExtensionElement({
+            circuit,
+            name: "DIGITAL:ProbeR",
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            value: {},
+            data: "",
+            modelName: "ideal",
+          });
+          return ok({
+            action: "add",
+            element: "PROBE",
+            index: circuit.elements.length - 1,
+            data: { name: "DIGITAL:ProbeR" },
+          });
         },
       },
-      (input) => {
-        const circuit = c();
-        addExtensionElement({
-          circuit,
-          name: "DIGITAL:ProbeR",
-          rotation: input.rotation,
-          x: input.x,
-          y: input.y,
-          value: {},
-          data: "",
-          modelName: "ideal",
-        });
-        return ok({
-          action: "add",
-          element: "PROBE",
-          index: circuit.elements.length - 1,
-          data: { name: "DIGITAL:ProbeR" },
-        });
+    );
+    CUD(
+      "vcc",
+      "DIGITAL:Volt",
+      vccSchema,
+      { description: "Add a VCC (+5V) power source to the circuit" },
+      {
+        add: (input, _ctx) => {
+          const circuit = c();
+          addExtensionElement({
+            circuit,
+            name: "DIGITAL:Volt",
+            rotation: input.rotation,
+            x: input.x,
+            y: input.y,
+            value: {},
+            data: "",
+            modelName: "ideal",
+          });
+          return ok({
+            action: "add",
+            element: "VCC",
+            index: circuit.elements.length - 1,
+            data: { name: "DIGITAL:Volt" },
+          });
+        },
       },
     );
     server.registerTool(

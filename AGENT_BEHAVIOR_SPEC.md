@@ -81,8 +81,15 @@ Unless explicitly forbidden by the user.
 - Avoid crossings
 - Keep wiring minimal and readable
 
----
+### Circuit Aesthetics — Closed-Loop Layout
 
+- Circuits should generally form a **continuous circular/closed-loop layout** where current flows Battery(+) → components → Battery(−) in a visually apparent loop
+- Avoid designs where one side of every component connects to a distant ground while the other side forms a chain — this creates dangling visual "stubs" that can confuse readers
+- Prefer routing the return path back alongside the forward path to form an **unbroken ring shape**
+- When using logic gates or other sub-circuits, their power/ground references should ideally also be integrated into the main closed loop rather than tied to a separate ground symbol far away
+- Exception: if the user explicitly requests a grounding scheme or the circuit truly requires multiple ground references (e.g., complex mixed-signal circuits), ground symbols are acceptable
+
+---
 
 ## 6. Ammeter Rules (STRICT)
 
@@ -576,10 +583,3 @@ Use `get_docs` for:
 - Full tool schemas
 - Output shapes
 - File-format notes
-
-Use existing `.ewb` examples for:
-
-- Pin order
-- Rotations
-- Real component spacing
-- Wire segment patterns
