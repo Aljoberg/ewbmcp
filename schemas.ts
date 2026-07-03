@@ -41,7 +41,7 @@ export const multiplierSchema = z.union([
   z.literal(1),
   z.literal(1000),
   z.literal(1000000),
-  z.literal(1000000000),
+  z.literal(0.001),
 ]);
 
 export const resistorSchema = z.object({
@@ -57,6 +57,7 @@ export const batterySchema = z.object({
   x: z.number(),
   y: z.number(),
   voltage: z.number(),
+  voltageMultiplier: multiplierSchema.optional().default(1),
 });
 
 export const capacitorSchema = z.object({

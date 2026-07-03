@@ -403,6 +403,9 @@ export interface Battery extends Element {
   data: {
     voltage: number;
   };
+  multipliers: {
+    voltage: number;
+  }
 }
 
 export interface Capacitor extends Element {

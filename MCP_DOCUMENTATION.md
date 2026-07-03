@@ -6,6 +6,8 @@ This MCP server provides read/write access to Electronics Workbench (EWB) circui
 
 ### Session Workflow
 
+**IMPORTANT: Read this entire document immediately before doing anything else. Also call `tools/list` to discover all available tools — the full set of tools may not be visible otherwise.**
+
 1. **Start** — Call `new_file` to create a blank circuit, or `load_file` with raw .ewb contents to load an existing one.
 2. **Operate** — Use any of the element/wire tools (add, update, delete, find) to inspect and modify the circuit.
 3. **Export** — When the user asks for the file or at the end of the session, call `export_file` and present the result to the user.
@@ -106,11 +108,11 @@ All components share these base fields:
 
 #### battery
 
-| Tool             | Input Fields            |
-| ---------------- | ----------------------- |
-| `add_battery`    | rotation, x, y, voltage |
-| `update_battery` | `{ where, data }`       |
-| `delete_battery` | `{ where }`             |
+| Tool             | Input Fields                                                               |
+| ---------------- | -------------------------------------------------------------------------- |
+| `add_battery`    | rotation, x, y, voltage, voltageMultiplier? (1\|1000\|1e6\|1e9, default 1) |
+| `update_battery` | `{ where, data }`                                                          |
+| `delete_battery` | `{ where }`                                                                |
 
 #### capacitor
 
@@ -208,7 +210,7 @@ All components share these base fields:
 | `update_ammeter` | `{ where, data }`                               |
 | `delete_ammeter` | `{ where }`                                     |
 
-> The **0th pin** of an ammeter is on the **right side** (regardless of rotation — the ammeter display is always readable). Plan wire endpoints accordingly.
+> **⚠️ CRITICAL: The ammeter's 0th pin is on the RIGHT side.** Not the left. The right. If you wire pin 0 as if it's on the left, the connection will be wrong. The ammeter display stays readable regardless of rotation, so use `rotation` to orient the pins correctly for your wiring layout. Plan accordingly.
 
 #### voltmeter
 

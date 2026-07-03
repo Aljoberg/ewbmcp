@@ -320,24 +320,12 @@ function toArray<T>(v: T | T[] | undefined): T[] {
   return Array.isArray(v) ? v : [v];
 }
 
-const MULTIPLIERS = [0, 1000, 1000000, 1000000000];
+const MULTIPLIERS = [0, 1000, 1000000, 0.001];
 
 export function deserialize(contents: Uint8Array) {
   const parsed = parse(contents) as unknown as { Project_5_1: Project51 }; // fuck you typescript
 
   Bun.file("output.json").write(JSON.stringify(parsed, null, 2));
-
-  const elementsComp = parsed.Project_5_1.Circuit.Elements.Comp;
-
-  //   // Wires (flat indices refer to element order in .out file, NOT changedElements index)
-  //   console.log(
-  //     `\n--- WIRES (${toArray(parsed.Project_5_1.Circuit.Wires.wire).length}) ---`,
-  //   );
-  //   for (const w of toArray(parsed.Project_5_1.Circuit.Wires.wire)) {
-  //     console.log(
-  //       `  [${w.pos[0]}:${w.pos[1]}] --node=${w.node_p}--> [${w.pos[2]}:${w.pos[3]}]  segs=[${w.segs}]`,
-  //     );
-  //   }
 
   const changedWires: ChangedWire[] = toArray(
     parsed.Project_5_1.Circuit.Wires?.wire,
@@ -1026,7 +1014,7 @@ function addWire({
 }
 
 function multiplierIndex(mult: number): number {
-  return mult >= 1000000000 ? 3 : mult >= 1000000 ? 2 : mult >= 1000 ? 1 : 0;
+  return mult >= 0.001 ? 3 : mult >= 1000000 ? 2 : mult >= 1000 ? 1 : 0;
 }
 let circuit: DeserializedCircuit | null = null;
 
@@ -1350,6 +1338,8 @@ export const handler = createMcpHandler(
             x: input.x,
             y: input.y,
             data: { voltage: input.voltage },
+            multipliers: { voltage: input.voltageMultiplier },
+            _modelUnits: [multiplierIndex(input.voltageMultiplier), 0, 0],
           }),
       },
     );
@@ -1870,7 +1860,7 @@ export const handler = createMcpHandler(
   },
   {
     instructions:
-      "At the start of the conversation, if asked to do anything regarding Electronics Workbench, call 'get_docs' and read the documentation. This is your source of truth and you should rely on it for accurate information.",
+      "URGENT: At the very start of the conversation, immediately call 'get_docs' and read the entire documentation before doing anything else. Do not skip this step. Also call 'tools/list' to discover all available tools — the client may not show all of them otherwise.",
     capabilities: {
       tools: {},
       resources: {},
