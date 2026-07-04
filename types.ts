@@ -1,7 +1,80 @@
-import type { MultiplicativeOperator } from "typescript";
-import type { WireDirection } from ".";
+import type { z } from "zod";
+import type { ok } from "./helpers";
 
 export interface ConfigBlock extends Record<string, ConfigValue> {}
+
+export enum WireDirection {
+  RIGHT = 1,
+  UP = 2,
+  LEFT = 4,
+  DOWN = 8,
+}
+
+export enum PartNum {
+  AC_VOLTAGE_SOURCE,
+  RESISTOR,
+  BATTERY,
+  CAPACITOR,
+  DIODE,
+  NPN_TRANSISTOR,
+  INDUCTOR,
+  AC_CURRENT_SOURCE,
+  GROUND,
+  CONNECTOR,
+  DC_CURRENT_SOURCE,
+  PNP_TRANSISTOR,
+  AMMETER,
+  VOLTMETER,
+  TRANSFORMER,
+  OPAMP,
+  ZENER_DIODE,
+  LED,
+  BULB,
+  FUSE,
+  RELAY,
+  TIME_DELAY_SWITCH,
+  N_CHANNEL_JFET,
+  P_CHANNEL_JFET,
+  "3_TERMINAL_DEPLETION_N_MOSFET",
+  "3_TERMINAL_DEPLETION_P_MOSFET",
+  "4_TERMINAL_DEPLETION_N_MOSFET",
+  "4_TERMINAL_DEPLETION_P_MOSFET",
+  "3_TERMINAL_ENHANCEMENT_N_MOSFET",
+  "3_TERMINAL_ENHANCEMENT_P_MOSFET",
+  "4_TERMINAL_ENHANCEMENT_N_MOSFET",
+  "4_TERMINAL_ENHANCEMENT_P_MOSFET",
+  VOLTAGE_CONTROLLED_VOLTAGE_SOURCE,
+  CURRENT_CONTROLLED_CURRENT_SOURCE,
+  VOLTAGE_CONTROLLED_CURRENT_SOURCE,
+  CURRENT_CONTROLLED_VOLTAGE_SOURCE,
+  VOLTAGE_CONTROLLED_SWITCH,
+  CURRENT_CONTROLLED_SWITCH,
+  SWITCH,
+  NODE,
+  IC_TEMP,
+  SUB_TEMP,
+}
+
+export const ROTATION_TO_INDEX = new Map<number, number>([
+  [0, 0],
+  [90, 1],
+  [180, 6],
+  [270, 7],
+]);
+export const INDEX_TO_ROTATION = [0, 90, 180, 270] as const;
+export const MULTIPLIERS = [1, 1000, 1000000, 0.001] as const;
+
+export function rotationFromEwbIndex(index: number) {
+  return INDEX_TO_ROTATION[index as 0 | 1 | 2 | 3] ?? 0;
+}
+
+export function rotationToEwbIndex(rotation: number) {
+  const index = ROTATION_TO_INDEX.get(rotation);
+  if (index === undefined) {
+    throw new Error(`Unsupported rotation: ${rotation}`);
+  }
+  return index;
+}
 
 export type ConfigValue =
   | number
@@ -574,4 +647,40 @@ export interface DeserializedCircuit {
   elements: Element[];
   wires: ChangedWire[];
   // more tba
+}
+
+export interface CUDCbsProps<T extends z.ZodObject<any>> {
+  add: (
+    input: z.infer<T>,
+    ctx: {
+      add: <U extends Element>(props: CUDAddProps<U>) => ReturnType<typeof ok>;
+    },
+  ) => ReturnType<typeof ok>;
+  update?: (
+    input: {
+      where: Partial<z.infer<T>>;
+      data: Partial<z.infer<T>>;
+    },
+    ctx: {
+      update: (
+        where: Partial<z.infer<T>>,
+        data: Partial<z.infer<T>>,
+      ) => ReturnType<typeof ok>;
+    },
+  ) => ReturnType<typeof ok>;
+  remove?: (
+    input: { where: Partial<z.infer<T>> },
+    ctx: {
+      remove: (where: Partial<z.infer<T>>) => ReturnType<typeof ok>;
+    },
+  ) => ReturnType<typeof ok>;
+}
+
+export interface CUDAddProps<T extends Element> {
+  rotation: number;
+  x: number;
+  y: number;
+  data: T["data"];
+  modelName?: string;
+  [key: string]: unknown;
 }

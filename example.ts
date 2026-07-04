@@ -1,4 +1,6 @@
-import { addBaseElement, deserialize, serialize } from ".";
+import { addBaseElement } from "./helpers";
+import { deserialize } from "./deserializer";
+import { serialize } from "./serializer";
 import { decodeFile, encodeFile } from "./ewb";
 import type { Resistor } from "./types";
 

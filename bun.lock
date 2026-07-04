@@ -7,7 +7,6 @@
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.29.0",
         "elysia": "^1.4.29",
-        "express": "^5.2.1",
         "mcp-handler": "^1.1.0",
         "zod": "^4.4.3",
       },
